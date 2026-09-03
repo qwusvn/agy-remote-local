@@ -4,8 +4,10 @@ import android.Manifest
 import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.net.Uri
@@ -13,6 +15,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.compose.runtime.DisposableEffect
 import android.webkit.ValueCallback
 import android.webkit.WebView
 import android.widget.Toast
@@ -176,11 +179,69 @@ fun MainScreen(
         if (tabs.isEmpty() && config.httpUrl.isNotBlank()) {
             val initialTab = BrowserTab(
                 id = UUID.randomUUID().toString(),
-                title = "Antigravity",
+                title = "Dự án / Phiên",
                 url = config.httpUrl
             )
             tabs.add(initialTab)
             activeTabId = initialTab.id
+        }
+    }
+
+    // Xử lý mở thẳng vào phiên khi người dùng bấm vào Thông báo phiên trên Android
+    val activity = context as? android.app.Activity
+    LaunchedEffect(activity?.intent) {
+        val targetUrl = activity?.intent?.getStringExtra("EXTRA_TARGET_URL")
+        if (!targetUrl.isNullOrBlank()) {
+            activity.intent.removeExtra("EXTRA_TARGET_URL")
+            val existingTab = tabs.find { it.url == targetUrl }
+            if (existingTab != null) {
+                activeTabId = existingTab.id
+                webViewInstance?.loadUrl(targetUrl)
+            } else {
+                val newTab = BrowserTab(
+                    id = UUID.randomUUID().toString(),
+                    title = "Phiên thông báo",
+                    url = targetUrl,
+                    isWorking = false,
+                    hasUnread = false
+                )
+                tabs.add(newTab)
+                activeTabId = newTab.id
+                webViewInstance?.loadUrl(targetUrl)
+            }
+        }
+    }
+
+    // Lắng nghe cập nhật phiên Realtime ngầm từ AgyNotificationService (không cần chạm tay)
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                val title = intent?.getStringExtra("title") ?: return
+                val isWorking = intent.getBooleanExtra("isWorking", false)
+                val convoId = intent.getStringExtra("convoId") ?: ""
+
+                tabs.forEachIndexed { i, t ->
+                    if ((convoId.isNotBlank() && t.url.contains(convoId)) || t.title.equals(title, ignoreCase = true)) {
+                        val isCurrentActive = t.id == activeTabId
+                        tabs[i] = t.copy(
+                            title = title,
+                            isWorking = isWorking,
+                            hasUnread = if (!isCurrentActive && !isWorking) true else t.hasUnread
+                        )
+                    }
+                }
+                // Đánh thức rendering engine của WebView cập nhật realtime ngay lập tức
+                webViewInstance?.evaluateJavascript("try { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('visibilitychange')); } catch(e) {}", null)
+            }
+        }
+        val filter = IntentFilter("com.example.agyremote.SESSION_UPDATE")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose {
+            context.unregisterReceiver(receiver)
         }
     }
 
@@ -901,7 +962,7 @@ fun MainScreen(
                     },
                     onTitleReceived = { title ->
                         val idx = tabs.indexOfFirst { it.id == activeTabId }
-                        if (idx >= 0 && title.isNotBlank() && title != "Antigravity 2.0" && title != "about:blank") {
+                        if (idx >= 0 && title.isNotBlank() && !title.startsWith("Antigravity", ignoreCase = true) && title != "about:blank") {
                             tabs[idx] = tabs[idx].copy(title = title)
                         }
                     },
@@ -927,6 +988,13 @@ fun MainScreen(
                         photoPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
+                    },
+                    onSessionInfoReceived = { path, title ->
+                        val idx = tabs.indexOfFirst { it.id == activeTabId }
+                        if (idx >= 0 && title.isNotBlank()) {
+                            val fullUrl = if (path.startsWith("http")) path else "${config.httpUrl.trimEnd('/')}$path"
+                            tabs[idx] = tabs[idx].copy(title = title, url = fullUrl)
+                        }
                     },
                     onWebViewCreated = { webView ->
                         webViewInstance = webView

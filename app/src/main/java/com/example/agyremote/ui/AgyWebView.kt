@@ -147,11 +147,17 @@ class AgyJsBridge(
     private val onStatus: (Boolean) -> Unit,
     private val onSwipeLeft: () -> Unit,
     private val onSwipeRight: () -> Unit,
-    private val onNavigate: (String) -> Unit
+    private val onNavigate: (String) -> Unit,
+    private val onSessionInfo: (String, String) -> Unit = { _, _ -> }
 ) {
     @android.webkit.JavascriptInterface
     fun reportWorkingStatus(isWorking: Boolean) {
         onStatus(isWorking)
+    }
+
+    @android.webkit.JavascriptInterface
+    fun reportSessionInfo(path: String, title: String) {
+        onSessionInfo(path, title)
     }
 
     @android.webkit.JavascriptInterface
@@ -187,6 +193,7 @@ fun AgyWebView(
     onLogReceived: (tag: String, message: String, isError: Boolean) -> Unit = { _, _, _ -> },
     onAuthCodeCaptured: (String) -> Unit = {},
     onRequestFileChooser: (ValueCallback<Array<Uri>>) -> Unit = {},
+    onSessionInfoReceived: (path: String, title: String) -> Unit = { _, _ -> },
     onWebViewCreated: (WebView) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -222,6 +229,11 @@ fun AgyWebView(
                     onNavigate = { screen ->
                         post {
                             onNavigationChanged(screen)
+                        }
+                    },
+                    onSessionInfo = { path, title ->
+                        post {
+                            onSessionInfoReceived(path, title)
                         }
                     }
                 ),
@@ -457,6 +469,60 @@ fun AgyWebView(
                                 window.__agyTrackInterval = setInterval(trackActiveConvo, 500);
                             }
                             trackActiveConvo();
+
+                            // Báo cáo tiêu đề phiên THỰC TẾ cho Android Tab Bar (Khắc phục hoàn toàn Tab ngố)
+                            function reportCurrentSession() {
+                                const p = window.location.pathname;
+                                let title = '';
+                                if (p === '/' || p === '') {
+                                    title = 'Dự án / Phiên';
+                                } else if (p.startsWith('/c/')) {
+                                    // 1. Tiêu đề Header của cuộc trò chuyện (Bất kỳ text nào trong header không phải nút bấm)
+                                    const header = document.querySelector('header, [class*="header"], [role="banner"]');
+                                    if (header) {
+                                        const candidates = Array.from(header.querySelectorAll('h1, h2, h3, div, span'))
+                                            .filter(el => el.children.length === 0 && !el.closest('button') && el.innerText && el.innerText.trim().length > 1);
+                                        if (candidates.length > 0) {
+                                            title = candidates[0].innerText.trim();
+                                        }
+                                    }
+                                    // 2. Tiêu đề trong sidebar item đang được chọn
+                                    if (!title) {
+                                        const activeItem = document.querySelector('[class*="conversationItem"][class*="active"], [aria-selected="true"] [class*="title"], [data-active="true"]');
+                                        if (activeItem && activeItem.innerText) {
+                                            title = activeItem.innerText.trim().split('\n')[0];
+                                        }
+                                    }
+                                    // 3. Heading toàn cục
+                                    if (!title) {
+                                        const heading = document.querySelector('h1, [role="heading"]');
+                                        if (heading && heading.innerText && heading.innerText.trim().length > 1) {
+                                            title = heading.innerText.trim();
+                                        }
+                                    }
+                                    // 4. Dự phòng
+                                    if (!title) {
+                                        title = 'Phiên đang mở';
+                                    }
+                                } else if (p.startsWith('/history')) {
+                                    title = 'Lịch sử';
+                                }
+                                if (title && window.AgyAndroidBridge && window.AgyAndroidBridge.reportSessionInfo) {
+                                    window.AgyAndroidBridge.reportSessionInfo(p, title);
+                                }
+                            }
+                            if (!window.__agySessionTitleInterval) {
+                                window.__agySessionTitleInterval = setInterval(reportCurrentSession, 350);
+                            }
+                            reportCurrentSession();
+
+                            // Realtime DOM Watcher: Giữ giao diện luôn cập nhật ngầm tức thời không cần chạm tay
+                            if (!window.__agyRealtimeDomWatcher) {
+                                window.__agyRealtimeDomWatcher = new MutationObserver(() => {
+                                    reportCurrentSession();
+                                });
+                                window.__agyRealtimeDomWatcher.observe(document.body, { childList: true, subtree: true });
+                            }
                         })();
                         """.trimIndent(),
                         null

@@ -87,7 +87,7 @@ class AgyNotificationService : Service() {
             }
         }
 
-        fun showPushNotification(context: Context, title: String, message: String) {
+        fun showPushNotification(context: Context, title: String, message: String, targetUrl: String? = null) {
             try {
                 ensureChannelsCreated(context)
 
@@ -100,7 +100,7 @@ class AgyNotificationService : Service() {
                     .setDefaults(NotificationCompat.DEFAULT_ALL)
                     .setVibrate(longArrayOf(0, 300, 200, 300))
                     .setAutoCancel(true)
-                    .setContentIntent(createOpenAppPendingIntent(context))
+                    .setContentIntent(createOpenAppPendingIntent(context, targetUrl))
                     .build()
 
                 val manager = NotificationManagerCompat.from(context)
@@ -111,16 +111,44 @@ class AgyNotificationService : Service() {
             }
         }
 
-        private fun createOpenAppPendingIntent(context: Context): PendingIntent {
+        fun showSessionNotification(context: Context, convoId: String, title: String, message: String, targetUrl: String?) {
+            try {
+                ensureChannelsCreated(context)
+
+                val notifTitle = if (title.isNotBlank() && title != "Phiên Antigravity") "💬 $title" else "💬 Cuộc trò chuyện Antigravity"
+                val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
+                    .setContentTitle(notifTitle)
+                    .setContentText(message)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setVibrate(longArrayOf(0, 250, 150, 250))
+                    .setAutoCancel(true)
+                    .setContentIntent(createOpenAppPendingIntent(context, targetUrl))
+                    .build()
+
+                val manager = NotificationManagerCompat.from(context)
+                val id = (convoId.hashCode() and 0x7FFFFFFF) % 10000 + 3000
+                manager.notify(id, notification)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        private fun createOpenAppPendingIntent(context: Context, targetUrl: String? = null): PendingIntent {
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                if (!targetUrl.isNullOrBlank()) {
+                    putExtra("EXTRA_TARGET_URL", targetUrl)
+                }
             }
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {
                 PendingIntent.FLAG_UPDATE_CURRENT
             }
-            return PendingIntent.getActivity(context, 0, intent, flags)
+            return PendingIntent.getActivity(context, targetUrl.hashCode() and 0xFFFF, intent, flags)
         }
     }
 
@@ -174,7 +202,23 @@ class AgyNotificationService : Service() {
         client.events.onEach { event ->
             when (event) {
                 is AgyServerEvent.AgentCompleted -> {
-                    showPushNotification(this, "🎉 Hoàn thành tác vụ", event.summary)
+                    showSessionNotification(this, event.convoId, event.title, event.summary, event.url.ifBlank { "http://$hostIp:$port/c/${event.convoId}" })
+
+                    // Phát broadcast cho UI MainScreen nếu đang mở để cập nhật tức thời
+                    val broadcastIntent = Intent("com.example.agyremote.SESSION_UPDATE").apply {
+                        putExtra("convoId", event.convoId)
+                        putExtra("title", event.title)
+                        putExtra("isWorking", false)
+                    }
+                    sendBroadcast(broadcastIntent)
+                }
+                is AgyServerEvent.SessionWorking -> {
+                    val broadcastIntent = Intent("com.example.agyremote.SESSION_UPDATE").apply {
+                        putExtra("convoId", event.convoId)
+                        putExtra("title", event.title)
+                        putExtra("isWorking", true)
+                    }
+                    sendBroadcast(broadcastIntent)
                 }
                 is AgyServerEvent.UserActionRequired -> {
                     showPushNotification(this, "⚠️ Cần bạn xác nhận", event.question)

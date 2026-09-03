@@ -21,9 +21,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 sealed class AgyServerEvent {
     data class Connected(val url: String) : AgyServerEvent()
     data class Disconnected(val reason: String) : AgyServerEvent()
-    data class AgentCompleted(val summary: String) : AgyServerEvent()
+    data class AgentCompleted(val convoId: String, val title: String, val summary: String, val url: String = "") : AgyServerEvent()
     data class UserActionRequired(val question: String) : AgyServerEvent()
     data class NotificationAlert(val title: String, val body: String) : AgyServerEvent()
+    data class SessionWorking(val convoId: String, val title: String) : AgyServerEvent()
 }
 
 class AgyWebSocketClient(
@@ -122,21 +123,32 @@ class AgyWebSocketClient(
     private fun handleIncomingMessage(rawText: String) {
         scope.launch {
             try {
-                // Kiểm tra các từ khóa quan trọng trong thông điệp JSON của AGY
-                if (rawText.contains("ASK_QUESTION") || rawText.contains("ask_question")) {
+                val json = try { JSONObject(rawText) } catch (e: Exception) { null }
+                val type = json?.optString("type") ?: ""
+
+                if (type == "AGENT_COMPLETED") {
+                    val convoId = json?.optString("convoId") ?: ""
+                    val title = json?.optString("title") ?: "Phiên làm việc"
+                    val summary = json?.optString("summary") ?: "Agent đã hoàn thành tác vụ"
+                    val url = json?.optString("url") ?: ""
+                    _events.emit(AgyServerEvent.AgentCompleted(convoId, title, summary, url))
+                } else if (type == "SESSION_START" || type == "SESSION_WORKING") {
+                    val convoId = json?.optString("convoId") ?: ""
+                    val title = json?.optString("title") ?: "Phiên làm việc"
+                    _events.emit(AgyServerEvent.SessionWorking(convoId, title))
+                } else if (rawText.contains("ASK_QUESTION") || rawText.contains("ask_question")) {
                     _events.emit(
                         AgyServerEvent.UserActionRequired("Antigravity đang chờ bạn trả lời hoặc chọn phương án")
                     )
                 } else if (rawText.contains("PLANNER_RESPONSE") && (rawText.contains("\"DONE\"") || rawText.contains("\"FINISH\""))) {
                     _events.emit(
-                        AgyServerEvent.AgentCompleted("Antigravity đã hoàn thành tác vụ hiện tại")
+                        AgyServerEvent.AgentCompleted("", "Antigravity", "Antigravity đã hoàn thành tác vụ hiện tại", "")
                     )
                 } else if (rawText.contains("request_review") || rawText.contains("AutoRunDecision")) {
                     _events.emit(
                         AgyServerEvent.UserActionRequired("Antigravity yêu cầu xác nhận chạy lệnh hệ thống")
                     )
-                } else if (rawText.contains("\"type\":\"notification\"") || rawText.contains("CASCADE_SELECT_NOTIFICATION")) {
-                    val json = try { JSONObject(rawText) } catch (e: Exception) { null }
+                } else if (type == "notification" || rawText.contains("CASCADE_SELECT_NOTIFICATION")) {
                     val title = json?.optString("title") ?: "Thông báo từ Antigravity"
                     val body = json?.optString("body") ?: "Có cập nhật mới từ tiến trình"
                     _events.emit(AgyServerEvent.NotificationAlert(title, body))

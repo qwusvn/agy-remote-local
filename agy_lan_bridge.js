@@ -361,9 +361,189 @@ try {
   }
 });
 
-// Xử lý WebSocket Upgrade
+// ==========================================
+// REALTIME WEBSOCKET HUB & SESSION WATCHER
+// ==========================================
+const wsClients = new Set();
+const BRAIN_DIR = 'C:\\Users\\qwusv\\.gemini\\antigravity\\brain';
+const lastKnownSteps = new Map();
+const convoTitles = new Map();
+
+function sendWsJson(socket, obj) {
+  try {
+    const payload = Buffer.from(JSON.stringify(obj), 'utf8');
+    const len = payload.length;
+    let header;
+    if (len < 126) {
+      header = Buffer.from([0x81, len]);
+    } else if (len <= 65535) {
+      header = Buffer.alloc(4);
+      header[0] = 0x81;
+      header[1] = 126;
+      header.writeUInt16BE(len, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[0] = 0x81;
+      header[1] = 127;
+      header.writeBigUInt64BE(BigInt(len), 2);
+    }
+    socket.write(Buffer.concat([header, payload]));
+  } catch (e) {
+    wsClients.delete(socket);
+  }
+}
+
+function broadcastWs(obj) {
+  for (const client of wsClients) {
+    sendWsJson(client, obj);
+  }
+}
+
+function handleAppWebSocketUpgrade(req, socket) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+  const acceptKey = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
+  );
+  socket.setKeepAlive(true, 2500);
+  socket.setNoDelay(true);
+  wsClients.add(socket);
+  console.log(`[APP WS] 📱 Android client đã kết nối WebSocket Hub (${wsClients.size} kết nối)`);
+
+  sendWsJson(socket, {
+    type: 'CONNECTED',
+    title: 'AGY Remote Realtime Hub',
+    message: 'Đã đồng bộ thời gian thực với Antigravity PC',
+    timestamp: Date.now()
+  });
+
+  socket.on('close', () => wsClients.delete(socket));
+  socket.on('error', () => wsClients.delete(socket));
+  socket.on('data', (buf) => {
+    if (buf[0] === 0x89) {
+      socket.write(Buffer.from([0x8A, 0x00])); // Pong
+    }
+  });
+}
+
+// Trích xuất tiêu đề từ nội dung câu hỏi đầu tiên
+function getConversationTitle(convoId, transcriptPath) {
+  if (convoTitles.has(convoId)) return convoTitles.get(convoId);
+  try {
+    if (fs.existsSync(transcriptPath)) {
+      const content = fs.readFileSync(transcriptPath, 'utf8');
+      const lines = content.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const item = JSON.parse(line);
+          if (item.type === 'USER_INPUT' && item.content) {
+            let t = item.content.replace(/<[^>]*>/g, '').trim();
+            t = t.split('\n')[0].trim();
+            if (t.length > 30) t = t.substring(0, 30) + '...';
+            if (t) {
+              convoTitles.set(convoId, t);
+              return t;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+  return 'Phiên Antigravity';
+}
+
+// Giám sát cập nhật các phiên trong thư mục brain theo thời gian thực
+function scanBrainSessions() {
+  try {
+    if (!fs.existsSync(BRAIN_DIR)) return;
+    const entries = fs.readdirSync(BRAIN_DIR, { withFileTypes: true });
+    for (const ent of entries) {
+      if (!ent.isDirectory() || ent.name.startsWith('.')) continue;
+      const convoId = ent.name;
+      const transcriptPath = `${BRAIN_DIR}\\${convoId}\\.system_generated\\logs\\transcript.jsonl`;
+      if (!fs.existsSync(transcriptPath)) continue;
+
+      const stat = fs.statSync(transcriptPath);
+      const lastKnown = lastKnownSteps.get(convoId) || { size: 0, lastIndex: -1, lastMtime: 0 };
+      if (stat.size === lastKnown.size) continue;
+
+      // Đọc các dòng mới từ transcript
+      const content = fs.readFileSync(transcriptPath, 'utf8');
+      const lines = content.trim().split('\n');
+      if (lines.length === 0) continue;
+
+      const lastLine = lines[lines.length - 1];
+      try {
+        const item = JSON.parse(lastLine);
+        const title = getConversationTitle(convoId, transcriptPath);
+
+        // Chỉ thông báo khi có bước mới
+        if (item.step_index !== lastKnown.lastIndex && lastKnown.size > 0) {
+          if (item.type === 'PLANNER_RESPONSE' && item.status === 'DONE') {
+            let summary = (item.content || '').replace(/<[^>]*>/g, '').trim();
+            summary = summary.replace(/[#*`_~]/g, '');
+            if (summary.length > 130) summary = summary.substring(0, 130) + '...';
+            if (!summary) summary = 'Agent đã hoàn tất câu trả lời';
+
+            console.log(`[SESSION COMPLETED] 📢 ${title}: ${summary}`);
+            broadcastWs({
+              type: 'AGENT_COMPLETED',
+              convoId: convoId,
+              title: title,
+              summary: summary,
+              url: `http://${getLanIp()}:${LISTEN_PORT}/c/${convoId}`,
+              timestamp: Date.now()
+            });
+          } else if (item.type === 'USER_INPUT') {
+            broadcastWs({
+              type: 'SESSION_START',
+              convoId: convoId,
+              title: title,
+              isWorking: true,
+              timestamp: Date.now()
+            });
+          }
+        }
+
+        lastKnownSteps.set(convoId, {
+          size: stat.size,
+          lastIndex: item.step_index,
+          lastMtime: stat.mtimeMs
+        });
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('[SCAN ERR]', e.message);
+  }
+}
+
+// Quét định kỳ mỗi 800ms để bắt mọi sự kiện phiên làm việc
+setInterval(scanBrainSessions, 800);
+scanBrainSessions();
+
+// Xử lý WebSocket Upgrade (Phân luồng giữa App Hub và Language Server Proxy)
 server.on('upgrade', (req, clientSocket, head) => {
+  // 1. Phục vụ kết nối Realtime Hub từ Android App Service
+  if (req.url.startsWith('/connect-websocket') || req.url.startsWith('/ws/events')) {
+    handleAppWebSocketUpgrade(req, clientSocket);
+    return;
+  }
+
+  // 2. Chuyển tiếp WebSocket tới Language Server của PC với KeepAlive cao cấp
   const targetSocket = net.connect(currentTargetPort, TARGET_HOST, () => {
+    clientSocket.setKeepAlive(true, 2500);
+    targetSocket.setKeepAlive(true, 2500);
+    clientSocket.setNoDelay(true);
+    targetSocket.setNoDelay(true);
+
     let upgradeHeader = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
     for (const [key, value] of Object.entries(req.headers)) {
       if (key.toLowerCase() === 'host') {
@@ -397,9 +577,11 @@ server.on('upgrade', (req, clientSocket, head) => {
 server.listen(LISTEN_PORT, '0.0.0.0', () => {
   const lanIp = getLanIp();
   console.log(`============================================================`);
-  console.log(` [AGY LAN BRIDGE V5.0 - DYNAMIC CSRF + REALTIME SYNC]`);
+  console.log(` [AGY LAN BRIDGE V5.5 - REALTIME WEBSOCKET HUB & NOTIFICATIONS]`);
   console.log(` -> Địa chỉ LAN: http://${lanIp}:${LISTEN_PORT}`);
+  console.log(` -> Realtime WebSocket: ws://${lanIp}:${LISTEN_PORT}/connect-websocket`);
   console.log(` -> Chuyển tiếp: http://${TARGET_HOST}:${currentTargetPort}`);
   console.log(` -> CSRF Token: ${currentCsrfToken}`);
   console.log(`============================================================`);
 });
+
