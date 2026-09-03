@@ -38,15 +38,18 @@ fun AgyWebView(
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
 
+            setBackgroundColor(android.graphics.Color.WHITE)
+            WebView.setWebContentsDebuggingEnabled(true)
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                databaseEnabled = true
                 allowFileAccess = true
                 allowContentAccess = true
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 cacheMode = WebSettings.LOAD_DEFAULT
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 mediaPlaybackRequiresUserGesture = false
             }
 

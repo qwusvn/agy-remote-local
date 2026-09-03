@@ -116,12 +116,31 @@ fun MainScreen() {
         }
     }
 
-    // Quản lý Foreground Notification Service khi cấu hình thay đổi
+    // Quản lý Foreground Notification Service khi cấu hình thay đổi (bọc try-catch an toàn)
     LaunchedEffect(config.hostIp, config.port, config.notificationsEnabled) {
-        if (config.notificationsEnabled && config.hostIp.isNotBlank()) {
-            AgyNotificationService.start(context, config.hostIp, config.port)
-        } else {
-            AgyNotificationService.stop(context)
+        try {
+            if (config.notificationsEnabled && config.hostIp.isNotBlank()) {
+                AgyNotificationService.start(context, config.hostIp, config.port)
+            } else {
+                AgyNotificationService.stop(context)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // Timeout thông minh: nếu sau 6s WebView không tải xong thì tự động ping kiểm tra host
+    LaunchedEffect(config.httpUrl, isLoading) {
+        if (isLoading) {
+            kotlinx.coroutines.delay(6000L)
+            if (isLoading && errorMessage == null) {
+                // Kiểm tra xem socket host có mở không
+                val host = com.example.agyremote.network.LanScanner().checkHost(config.hostIp, config.port, timeoutMs = 800)
+                if (host == null) {
+                    isLoading = false
+                    errorMessage = "Không thể kết nối tới ${config.hostIp}:${config.port}. Có thể máy tính chưa bật LAN Bridge hoặc chặn Windows Firewall."
+                }
+            }
         }
     }
 
@@ -146,6 +165,7 @@ fun MainScreen() {
                 actions = {
                     IconButton(onClick = {
                         errorMessage = null
+                        isLoading = true
                         webViewInstance?.reload()
                     }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Tải lại trang")
@@ -165,13 +185,34 @@ fun MainScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Thanh tiến trình tải trang
-            if (isLoading) {
-                LinearProgressIndicator(
+            // Hiển thị trạng thái đang tải trang kèm nút hủy nhanh
+            if (isLoading && errorMessage == null) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                )
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Đang kết nối tới Antigravity...",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = config.httpUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    OutlinedButton(onClick = { showConnectionDialog = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cài đặt IP khác")
+                    }
+                }
             }
 
             if (errorMessage != null) {

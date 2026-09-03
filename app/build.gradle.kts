@@ -95,3 +95,24 @@ dependencies {
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 }
+
+// Tự động copy file APK vào D:/apk sau mỗi lần build
+val targetApkDir = file("D:/apk")
+val copyApkTask = tasks.register<Copy>("copyApkToTargetDir") {
+    from(layout.buildDirectory.dir("outputs/apk"))
+    include("**/*.apk")
+    into(targetApkDir)
+    eachFile {
+        path = name
+    }
+    includeEmptyDirs = false
+    doFirst {
+        if (!targetApkDir.exists()) {
+            targetApkDir.mkdirs()
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith("assemble") }.configureEach {
+    finalizedBy(copyApkTask)
+}

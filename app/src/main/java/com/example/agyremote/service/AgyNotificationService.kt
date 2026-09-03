@@ -68,7 +68,11 @@ class AgyNotificationService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 wsClient?.stop()
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -76,10 +80,20 @@ class AgyNotificationService : Service() {
                 val hostIp = intent.getStringExtra(EXTRA_HOST_IP) ?: "192.168.1.220"
                 val port = intent.getIntExtra(EXTRA_PORT, 4400)
 
-                startForeground(
-                    NOTIFICATION_FOREGROUND_ID,
-                    createForegroundNotification(hostIp, port)
-                )
+                try {
+                    val notification = createForegroundNotification(hostIp, port)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_FOREGROUND_ID,
+                            notification,
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_FOREGROUND_ID, notification)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
 
                 setupWebSocket(hostIp, port)
             }
@@ -147,7 +161,7 @@ class AgyNotificationService : Service() {
         NotificationCompat.Builder(this, CHANNEL_FOREGROUND_ID)
             .setContentTitle("AGY Remote đang chạy ngầm")
             .setContentText("Kết nối: $hostIp:$port")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setContentIntent(createOpenAppPendingIntent())
             .build()
@@ -156,7 +170,7 @@ class AgyNotificationService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_FOREGROUND_ID)
             .setContentTitle("AGY Remote")
             .setContentText(status)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setContentIntent(createOpenAppPendingIntent())
             .build()
@@ -170,7 +184,7 @@ class AgyNotificationService : Service() {
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(createOpenAppPendingIntent())
@@ -178,7 +192,7 @@ class AgyNotificationService : Service() {
 
         try {
             NotificationManagerCompat.from(this).notify(NOTIFICATION_ALERT_ID, notification)
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
             e.printStackTrace()
         }
     }
