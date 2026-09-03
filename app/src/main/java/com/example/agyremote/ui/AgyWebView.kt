@@ -114,6 +114,9 @@ fun executeAgyNav(webView: WebView?, action: String) {
                 } else {
                     navigateTo(getActiveConvoPath(), 'active_convo');
                 }
+            } else if (action === 'go_projects') {
+                // Điều hướng trực tiếp về màn hình Dự án / Phiên ('/')
+                navigateTo('/', 'projects');
             }
         })();
     """.trimIndent()
@@ -133,7 +136,7 @@ fun toggleAgySidebar(webView: WebView?) {
 }
 
 fun navigateToProjects(webView: WebView?) {
-    toggleAgySidebar(webView)
+    executeAgyNav(webView, "go_projects")
 }
 
 fun navigateToHistory(webView: WebView?) {
@@ -317,21 +320,66 @@ fun AgyWebView(
                         }
                         $themeScript
 
-                        // Giám sát trạng thái Agent Working (Stop button hoặc spinner)
+                        // Giám sát trạng thái Agent Working CHÍNH XÁC (vùng Chat Input & Generating Stream)
                         (function() {
                             let lastWorkingState = false;
+                            let consecutiveMatches = 0;
+                            let consecutiveAbsents = 0;
+
                             function checkAgentStatus() {
-                                const stopBtn = document.querySelector('button[aria-label*="Stop" i], button[aria-label*="Cancel" i], .lucide-square, svg.animate-spin');
-                                const isWorking = stopBtn !== null;
-                                if (isWorking !== lastWorkingState) {
-                                    lastWorkingState = isWorking;
-                                    if (window.AgyAndroidBridge) {
-                                        window.AgyAndroidBridge.reportWorkingStatus(isWorking);
+                                let isWorking = false;
+                                
+                                // 1. Kiểm tra nút Stop/Cancel trong vùng Chat Form
+                                const chatInput = document.querySelector('textarea, [contenteditable="true"], input[placeholder*="Ask" i]');
+                                if (chatInput) {
+                                    const chatContainer = chatInput.closest('form, div.relative, [class*="chat-input"], [class*="input-container"]') || document.body;
+                                    // Nút vuông stop hoặc nút có aria-label Stop/Cancel trong vùng chat
+                                    const stopBtn = chatContainer.querySelector('button[aria-label*="Stop" i], button[aria-label*="Cancel" i], button rect, button .lucide-square');
+                                    if (stopBtn) {
+                                        isWorking = true;
+                                    }
+                                }
+
+                                // 2. Kiểm tra nút Stop toàn cục nếu có aria-label chính xác
+                                if (!isWorking) {
+                                    const explicitStopBtn = document.querySelector('button[aria-label="Stop generation" i], button[aria-label="Stop" i], button[aria-label="Cancel" i]');
+                                    if (explicitStopBtn) {
+                                        isWorking = true;
+                                    }
+                                }
+
+                                // 3. Kiểm tra streaming active indicator trong message stream
+                                if (!isWorking) {
+                                    const streamActive = document.querySelector('[data-is-generating="true"], [class*="streaming-active"], [class*="thinking-bubble"]');
+                                    if (streamActive) {
+                                        isWorking = true;
+                                    }
+                                }
+
+                                // Lọc nhiễu / Debounce (Cần 2 chu kỳ 400ms xác nhận để tránh chớp nháy)
+                                if (isWorking) {
+                                    consecutiveMatches++;
+                                    consecutiveAbsents = 0;
+                                    if (consecutiveMatches >= 2 && !lastWorkingState) {
+                                        lastWorkingState = true;
+                                        if (window.AgyAndroidBridge) {
+                                            window.AgyAndroidBridge.reportWorkingStatus(true);
+                                        }
+                                    }
+                                } else {
+                                    consecutiveAbsents++;
+                                    consecutiveMatches = 0;
+                                    if (consecutiveAbsents >= 2 && lastWorkingState) {
+                                        lastWorkingState = false;
+                                        if (window.AgyAndroidBridge) {
+                                            window.AgyAndroidBridge.reportWorkingStatus(false);
+                                        }
                                     }
                                 }
                             }
+
                             if (!window.__agyMonitorInterval) {
-                                window.__agyMonitorInterval = setInterval(checkAgentStatus, 500);
+                                window.__agyMonitorInterval = setInterval(checkAgentStatus, 400);
                             }
 
                             // Theo dõi phiên đang mở (Active Conversation)

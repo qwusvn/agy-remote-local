@@ -20,9 +20,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -132,7 +136,7 @@ data class LogItem(
     val isError: Boolean
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     config: ConnectionConfig = ConnectionConfig(),
@@ -140,6 +144,7 @@ fun MainScreen(
     isDarkTheme: Boolean = true
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
     var showConnectionDialog by remember { mutableStateOf(false) }
@@ -171,12 +176,16 @@ fun MainScreen(
     fun createNewTab(url: String = config.httpUrl) {
         val newTab = BrowserTab(
             id = UUID.randomUUID().toString(),
-            title = "Tab ${tabs.size + 1}",
-            url = url
+            title = "Dự án / Phiên",
+            url = url,
+            isWorking = false
         )
         tabs.add(newTab)
         activeTabId = newTab.id
         webViewInstance?.loadUrl(url)
+        webViewInstance?.postDelayed({
+            navigateToProjects(webViewInstance)
+        }, 350)
     }
 
     fun closeTab(tabId: String) {
@@ -245,9 +254,6 @@ fun MainScreen(
         if (previousWorkingState && !isWorking) {
             val title = tabs.getOrNull(idx)?.title ?: "Cuộc trò chuyện"
             notifyTaskCompleted(title)
-            scope.launch {
-                snackbarHostState.showSnackbar("🎉 Agent đã hoàn thành tác vụ!")
-            }
         }
         previousWorkingState = isWorking
     }
@@ -695,7 +701,13 @@ fun MainScreen(
                                     .width(singleTabWidth)
                                     .height(36.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { selectTab(tab) }
+                                    .combinedClickable(
+                                        onClick = { selectTab(tab) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            Toast.makeText(context, "📑 ${tab.title}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
                             ) {
                                 Row(
                                     modifier = Modifier
