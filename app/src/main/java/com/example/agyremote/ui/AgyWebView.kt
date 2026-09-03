@@ -1,8 +1,10 @@
 package com.example.agyremote.ui
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Message
 import android.view.ViewGroup
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -41,6 +43,11 @@ fun AgyWebView(
             setBackgroundColor(android.graphics.Color.WHITE)
             WebView.setWebContentsDebuggingEnabled(true)
 
+            // Cho phép Cookie và Third-party cookies để xác thực Google OAuth
+            val cookieManager = android.webkit.CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -51,6 +58,34 @@ fun AgyWebView(
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 mediaPlaybackRequiresUserGesture = false
+                setSupportMultipleWindows(true)
+                javaScriptCanOpenWindowsAutomatically = true
+
+                // Xóa định danh WebView nhúng để Google OAuth cho phép xác thực
+                val defaultUa = userAgentString
+                userAgentString = defaultUa.replace("; wv", "").replace("Version/4.0 ", "")
+            }
+
+            fun openInDefaultBrowser(targetUrl: String) {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addCategory(Intent.CATEGORY_BROWSABLE)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    try {
+                        val chooser = Intent.createChooser(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)),
+                            "Mở trang đăng nhập"
+                        ).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(chooser)
+                    } catch (ex: Exception) {
+                        ex.printStackTrace()
+                    }
+                }
             }
 
             webViewClient = object : WebViewClient() {
@@ -62,6 +97,20 @@ fun AgyWebView(
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     onPageFinished()
+                }
+
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val targetUrl = request?.url?.toString() ?: return false
+                    // Nếu là URL nội bộ máy chủ AGY thì để WebView load
+                    if (targetUrl.contains(":4400")) {
+                        return false
+                    }
+                    // Nếu là link đăng nhập Google hoặc bên ngoài -> Mở bằng trình duyệt mặc định của máy
+                    openInDefaultBrowser(targetUrl)
+                    return true
                 }
 
                 override fun onReceivedError(
@@ -87,6 +136,39 @@ fun AgyWebView(
                         return true
                     }
                     return super.onShowFileChooser(webView, filePathCallback, fileChooserParams)
+                }
+
+                override fun onCreateWindow(
+                    view: WebView?,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: Message?
+                ): Boolean {
+                    val hitTest = view?.hitTestResult
+                    val extraUrl = hitTest?.extra
+                    if (!extraUrl.isNullOrBlank()) {
+                        openInDefaultBrowser(extraUrl)
+                        return true
+                    }
+
+                    val popupWebView = WebView(context).apply {
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                v: WebView?,
+                                req: WebResourceRequest?
+                            ): Boolean {
+                                val popupUrl = req?.url?.toString()
+                                if (!popupUrl.isNullOrBlank()) {
+                                    openInDefaultBrowser(popupUrl)
+                                }
+                                return true
+                            }
+                        }
+                    }
+                    val transport = resultMsg?.obj as? WebView.WebViewTransport
+                    transport?.webView = popupWebView
+                    resultMsg?.sendToTarget()
+                    return true
                 }
             }
         }
