@@ -57,6 +57,71 @@ class AgyNotificationService : Service() {
             }
             context.startService(intent)
         }
+        fun ensureChannelsCreated(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+
+                // 1. Kênh duy trì dịch vụ chạy ngầm
+                val fgChannel = NotificationChannel(
+                    CHANNEL_FOREGROUND_ID,
+                    "Trạng thái kết nối AGY",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Duy trì kết nối thời gian thực với Antigravity trên máy tính"
+                }
+
+                // 2. Kênh thông báo nổi (Heads-up Notification)
+                val alertChannel = NotificationChannel(
+                    CHANNEL_ALERTS_ID,
+                    "Cảnh báo & Tác vụ AGY",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Thông báo khi Agent hoàn tất tác vụ hoặc cần bạn phê duyệt lệnh"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 300, 200, 300)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
+
+                manager.createNotificationChannel(fgChannel)
+                manager.createNotificationChannel(alertChannel)
+            }
+        }
+
+        fun showPushNotification(context: Context, title: String, message: String) {
+            try {
+                ensureChannelsCreated(context)
+
+                val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
+                    .setContentTitle(title)
+                    .setContentText(message)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setVibrate(longArrayOf(0, 300, 200, 300))
+                    .setAutoCancel(true)
+                    .setContentIntent(createOpenAppPendingIntent(context))
+                    .build()
+
+                val manager = NotificationManagerCompat.from(context)
+                val id = (System.currentTimeMillis() % 10000).toInt() + 2000
+                manager.notify(id, notification)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        private fun createOpenAppPendingIntent(context: Context): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            return PendingIntent.getActivity(context, 0, intent, flags)
+        }
     }
 
     override fun onCreate() {
@@ -109,19 +174,19 @@ class AgyNotificationService : Service() {
         client.events.onEach { event ->
             when (event) {
                 is AgyServerEvent.AgentCompleted -> {
-                    showAlertNotification("Hoàn thành tác vụ", event.summary)
+                    showPushNotification(this, "🎉 Hoàn thành tác vụ", event.summary)
                 }
                 is AgyServerEvent.UserActionRequired -> {
-                    showAlertNotification("Cần bạn xác nhận", event.question)
+                    showPushNotification(this, "⚠️ Cần bạn xác nhận", event.question)
                 }
                 is AgyServerEvent.NotificationAlert -> {
-                    showAlertNotification(event.title, event.body)
+                    showPushNotification(this, event.title, event.body)
                 }
                 is AgyServerEvent.Connected -> {
-                    updateForegroundNotification("Đã kết nối: $hostIp:$port")
+                    updateForegroundNotification("🟢 Đang kết nối LAN: $hostIp:$port")
                 }
                 is AgyServerEvent.Disconnected -> {
-                    updateForegroundNotification("Mất kết nối: Đang thử lại...")
+                    updateForegroundNotification("AGY Remote: Sẵn sàng kết nối")
                 }
             }
         }.launchIn(serviceScope)
@@ -142,7 +207,7 @@ class AgyNotificationService : Service() {
                 description = "Duy trì kết nối thời gian thực với Antigravity trên máy tính"
             }
 
-            // Kênh thông báo nổi khi có sự kiện quan trọng
+            // Kênh thông báo nổi khi có sự kiện quan trọng (Heads-up notification)
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERTS_ID,
                 "Cảnh báo & Tác vụ AGY",
@@ -150,6 +215,8 @@ class AgyNotificationService : Service() {
             ).apply {
                 description = "Thông báo khi Agent trả lời xong hoặc cần bạn phê duyệt lệnh"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
             manager.createNotificationChannel(fgChannel)
@@ -159,11 +226,11 @@ class AgyNotificationService : Service() {
 
     private fun createForegroundNotification(hostIp: String, port: Int) =
         NotificationCompat.Builder(this, CHANNEL_FOREGROUND_ID)
-            .setContentTitle("AGY Remote đang chạy ngầm")
-            .setContentText("Kết nối: $hostIp:$port")
+            .setContentTitle("AGY Remote")
+            .setContentText("🟢 Sẵn sàng phục vụ • LAN: $hostIp:$port")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
-            .setContentIntent(createOpenAppPendingIntent())
+            .setContentIntent(createOpenAppPendingIntent(this))
             .build()
 
     private fun updateForegroundNotification(status: String) {
@@ -172,41 +239,11 @@ class AgyNotificationService : Service() {
             .setContentText(status)
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
-            .setContentIntent(createOpenAppPendingIntent())
+            .setContentIntent(createOpenAppPendingIntent(this))
             .build()
 
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_FOREGROUND_ID, notification)
-    }
-
-    private fun showAlertNotification(title: String, message: String) {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ALERTS_ID)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setSmallIcon(R.drawable.ic_notification)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(createOpenAppPendingIntent())
-            .build()
-
-        try {
-            NotificationManagerCompat.from(this).notify(NOTIFICATION_ALERT_ID, notification)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun createOpenAppPendingIntent(): PendingIntent {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        return PendingIntent.getActivity(this, 0, intent, flags)
     }
 
     override fun onDestroy() {

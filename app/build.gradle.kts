@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -96,19 +98,23 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 }
 
-// Tự động copy file APK vào D:/apk sau mỗi lần build
-val targetApkDir = file("D:/apk")
-val copyApkTask = tasks.register<Copy>("copyApkToTargetDir") {
-    from(layout.buildDirectory.dir("outputs/apk"))
-    include("**/*.apk")
-    into(targetApkDir)
-    eachFile {
-        path = name
-    }
-    includeEmptyDirs = false
-    doFirst {
-        if (!targetApkDir.exists()) {
-            targetApkDir.mkdirs()
+// Tự động lưu duy nhất 1 bản APK vào D:/apk theo Điều luật 9 (v1.5.0)
+val copyApkTask = tasks.register("copyApkToTargetDir") {
+    val buildDir = layout.buildDirectory
+    doLast {
+        val targetDir = File("D:/apk")
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
+        val debugApk = buildDir.file("outputs/apk/debug/app-debug.apk").get().asFile
+        if (debugApk.exists()) {
+            val dest = File(targetDir, "agy-remote-debug.apk")
+            debugApk.copyTo(dest, overwrite = true)
+            // Xóa file trùng lặp app-debug.apk nếu có
+            val duplicate = File(targetDir, "app-debug.apk")
+            if (duplicate.exists()) {
+                duplicate.delete()
+            }
         }
     }
 }

@@ -14,12 +14,19 @@ import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "agy_connection_prefs")
 
+enum class AppTheme {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
 data class ConnectionConfig(
     val hostIp: String = "192.168.1.220",
     val port: Int = 4400,
     val autoReconnect: Boolean = true,
     val notificationsEnabled: Boolean = true,
-    val recentHosts: Set<String> = emptySet()
+    val recentHosts: Set<String> = emptySet(),
+    val theme: AppTheme = AppTheme.DARK
 ) {
     val httpUrl: String
         get() = "http://$hostIp:$port"
@@ -36,6 +43,7 @@ class ConnectionPreferences(private val context: Context) {
         val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         val RECENT_HOSTS = stringSetPreferencesKey("recent_hosts")
+        val APP_THEME = stringPreferencesKey("app_theme")
     }
 
     val configFlow: Flow<ConnectionConfig> = context.dataStore.data.map { preferences ->
@@ -44,13 +52,16 @@ class ConnectionPreferences(private val context: Context) {
         val autoReconnect = preferences[PreferencesKeys.AUTO_RECONNECT] ?: true
         val notificationsEnabled = preferences[PreferencesKeys.NOTIFICATIONS_ENABLED] ?: true
         val recentHosts = preferences[PreferencesKeys.RECENT_HOSTS] ?: setOf("192.168.1.220:4400")
+        val themeStr = preferences[PreferencesKeys.APP_THEME] ?: AppTheme.DARK.name
+        val theme = try { AppTheme.valueOf(themeStr) } catch (e: Exception) { AppTheme.DARK }
 
         ConnectionConfig(
             hostIp = hostIp,
             port = port,
             autoReconnect = autoReconnect,
             notificationsEnabled = notificationsEnabled,
-            recentHosts = recentHosts
+            recentHosts = recentHosts,
+            theme = theme
         )
     }
 
@@ -75,6 +86,12 @@ class ConnectionPreferences(private val context: Context) {
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.NOTIFICATIONS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setTheme(theme: AppTheme) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.APP_THEME] = theme.name
         }
     }
 }

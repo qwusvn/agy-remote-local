@@ -32,8 +32,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -45,21 +47,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.agyremote.data.AppTheme
 import com.example.agyremote.data.ConnectionConfig
 import com.example.agyremote.network.DiscoveredHost
 import com.example.agyremote.network.LanScanner
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.provider.Settings
+import com.example.agyremote.service.AgyNotificationService
 
 @Composable
 fun ConnectionDialog(
     currentConfig: ConnectionConfig,
     onDismiss: () -> Unit,
+    onThemeChange: (AppTheme) -> Unit = {},
     onConnect: (ip: String, port: Int, autoReconnect: Boolean, notificationsEnabled: Boolean) -> Unit
 ) {
     var ipInput by remember { mutableStateOf(currentConfig.hostIp) }
     var portInput by remember { mutableStateOf(currentConfig.port.toString()) }
     var autoReconnect by remember { mutableStateOf(currentConfig.autoReconnect) }
     var notificationsEnabled by remember { mutableStateOf(currentConfig.notificationsEnabled) }
+    var selectedTheme by remember { mutableStateOf(currentConfig.theme) }
 
     val scope = rememberCoroutineScope()
     val lanScanner = remember { LanScanner() }
@@ -253,6 +262,47 @@ fun ConnectionDialog(
                             onCheckedChange = { notificationsEnabled = it }
                         )
                     }
+
+                    if (notificationsEnabled) {
+                        val ctx = LocalContext.current
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    AgyNotificationService.showPushNotification(
+                                        ctx,
+                                        "🔔 Kiểm tra thông báo đẩy",
+                                        "Hệ thống thông báo đẩy AGY Remote hoạt động hoàn hảo!"
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("🔔 Bắn thử thông báo", style = MaterialTheme.typography.labelSmall)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                            putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                                        }
+                                        ctx.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = android.net.Uri.fromParts("package", ctx.packageName, null)
+                                        }
+                                        ctx.startActivity(intent)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("⚙️ Cấp quyền", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                 }
 
                 item {
@@ -274,6 +324,50 @@ fun ConnectionDialog(
                             onCheckedChange = { autoReconnect = it }
                         )
                     }
+                }
+
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Chế độ giao diện", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                AppTheme.DARK to "🌙 Tối",
+                                AppTheme.LIGHT to "☀️ Sáng",
+                                AppTheme.SYSTEM to "⚙️ Hệ thống"
+                            ).forEach { (t, label) ->
+                                val selected = selectedTheme == t
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            selectedTheme = t
+                                            onThemeChange(t)
+                                        }
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         },
