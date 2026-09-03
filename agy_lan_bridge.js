@@ -324,32 +324,6 @@ try {
     localStorage.setItem(k, v);
   }
 } catch(e) {}
-
-// Tự động chuyển hướng đăng nhập Google trực tiếp trên điện thoại
-(function() {
-  try {
-    const origFetch = window.fetch;
-    window.fetch = function(...args) {
-      const url = args[0] && (typeof args[0] === 'string' ? args[0] : args[0].url);
-      if (url && url.includes('LanguageServerService/Login')) {
-        console.log('[AUTH_INTERCEPT] Bắt được RPC Login, chuyển hướng sang /auth/google');
-        window.location.href = '/auth/google';
-        return new Promise(() => {});
-      }
-      return origFetch.apply(this, args);
-    };
-
-    document.addEventListener('click', function(e) {
-      const btn = e.target.closest('button, a, div[role="button"]');
-      if (btn && (btn.innerText.includes('Continue with Google') || btn.innerText.includes('Sign in with Google'))) {
-        console.log('[AUTH_INTERCEPT] Click nút Continue with Google, chuyển hướng /auth/google');
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = '/auth/google';
-      }
-    }, true);
-  } catch(e) {}
-})();
 </script>`;
             if (html.includes('</head>')) {
               html = html.replace('</head>', `${injectScript}</head>`);

@@ -320,6 +320,69 @@ fun AgyWebView(
                         }
                         $themeScript
 
+                        // CSS tối ưu hiển thị thẻ hành động (Tool Actions) và chuyển cảnh vuốt mượt mà
+                        (function() {
+                            const styleId = 'agy-action-viewer-styles';
+                            if (!document.getElementById(styleId)) {
+                                const style = document.createElement('style');
+                                style.id = styleId;
+                                style.textContent = `
+                                    /* Khôi phục và đảm bảo hiển thị thẻ Action của Agent */
+                                    [data-testid="worked-for-collapsible"],
+                                    .tool-viewer-card,
+                                    [class*="toolGroupCollapsible"],
+                                    [class*="terminalGroup"],
+                                    [data-testid*="tool-"] {
+                                        display: block !important;
+                                        visibility: visible !important;
+                                        opacity: 1 !important;
+                                        max-width: 100% !important;
+                                    }
+                                    .tool-viewer-card {
+                                        border: 1px solid rgba(148, 163, 184, 0.25) !important;
+                                        border-radius: 8px !important;
+                                        margin-top: 5px !important;
+                                        margin-bottom: 5px !important;
+                                        background-color: rgba(30, 41, 59, 0.45) !important;
+                                    }
+                                    /* Hiệu ứng chuyển động mượt mà cho Web Container */
+                                    main, [role="main"], #root, [class*="app-container"] {
+                                        transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                                    }
+                                `;
+                                document.head.appendChild(style);
+                            }
+                        })();
+
+                        // Tự động mở rộng và giữ hiển thị các thẻ Action (Tool Actions) trong tin nhắn
+                        (function() {
+                            function expandToolActions() {
+                                // 1. Tìm các nút Collapsible chứa Worked for hoặc Generation Steps
+                                const triggers = document.querySelectorAll('[data-testid="worked-for-collapsible"], [class*="worked-for"] button, button[aria-expanded="false"]');
+                                triggers.forEach(btn => {
+                                    const text = (btn.innerText || btn.textContent || '').trim();
+                                    if (text.includes('Worked for') || text.includes('Generation Steps') || text.includes('step') || text.includes('action')) {
+                                        const actualBtn = btn.tagName === 'BUTTON' ? btn : (btn.querySelector('button, [role="button"]') || btn);
+                                        if (actualBtn && actualBtn.getAttribute('aria-expanded') !== 'true') {
+                                            actualBtn.click();
+                                        }
+                                    }
+                                });
+
+                                // 2. Đảm bảo các thẻ tool-viewer-card được mở rộng nếu có nút toggle
+                                const toolCards = document.querySelectorAll('.tool-viewer-card');
+                                toolCards.forEach(card => {
+                                    card.style.display = 'block';
+                                    card.style.visibility = 'visible';
+                                });
+                            }
+
+                            if (!window.__agyExpandActionsInterval) {
+                                window.__agyExpandActionsInterval = setInterval(expandToolActions, 600);
+                            }
+                            expandToolActions();
+                        })();
+
                         // Giám sát trạng thái Agent Working CHÍNH XÁC (vùng Chat Input & Generating Stream)
                         (function() {
                             let lastWorkingState = false;

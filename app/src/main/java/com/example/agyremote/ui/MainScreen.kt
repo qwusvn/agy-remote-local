@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
@@ -117,6 +118,11 @@ import java.io.File
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -126,7 +132,8 @@ data class BrowserTab(
     val id: String,
     val title: String,
     val url: String,
-    val isWorking: Boolean = false
+    val isWorking: Boolean = false,
+    val hasUnread: Boolean = false
 )
 
 data class LogItem(
@@ -160,6 +167,10 @@ fun MainScreen(
     var activeTabId by remember { mutableStateOf("") }
     var previousWorkingState by remember { mutableStateOf(false) }
 
+    // Animation trượt mượt mà khi vuốt chuyển màn hình
+    val swipeOffsetX = remember { Animatable(0f) }
+    val swipeAlpha = remember { Animatable(1f) }
+
     // Khởi tạo tab đầu tiên khi mở app
     LaunchedEffect(config.httpUrl) {
         if (tabs.isEmpty() && config.httpUrl.isNotBlank()) {
@@ -178,7 +189,8 @@ fun MainScreen(
             id = UUID.randomUUID().toString(),
             title = "Dự án / Phiên",
             url = url,
-            isWorking = false
+            isWorking = false,
+            hasUnread = false
         )
         tabs.add(newTab)
         activeTabId = newTab.id
@@ -203,9 +215,39 @@ fun MainScreen(
     }
 
     fun selectTab(tab: BrowserTab) {
+        val idx = tabs.indexOfFirst { it.id == tab.id }
+        if (idx >= 0) {
+            tabs[idx] = tabs[idx].copy(hasUnread = false)
+        }
         if (activeTabId != tab.id) {
             activeTabId = tab.id
             webViewInstance?.loadUrl(tab.url)
+        }
+    }
+
+    // Mở rộng toàn bộ các thẻ hành động (Tool Actions) của Agent
+    fun expandAllActions() {
+        val js = """
+            (function() {
+                const triggers = document.querySelectorAll('[data-testid="worked-for-collapsible"], [class*="worked-for"] button, button[aria-expanded="false"]');
+                triggers.forEach(btn => {
+                    const text = (btn.innerText || btn.textContent || '').trim();
+                    if (text.includes('Worked for') || text.includes('Generation Steps') || text.includes('step') || text.includes('action')) {
+                        const actualBtn = btn.tagName === 'BUTTON' ? btn : (btn.querySelector('button, [role="button"]') || btn);
+                        if (actualBtn && actualBtn.getAttribute('aria-expanded') !== 'true') {
+                            actualBtn.click();
+                        }
+                    }
+                });
+                document.querySelectorAll('.tool-viewer-card').forEach(c => {
+                    c.style.display = 'block';
+                    c.style.visibility = 'visible';
+                });
+            })();
+        """.trimIndent()
+        webViewInstance?.evaluateJavascript(js) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            Toast.makeText(context, "⚡ Đã mở rộng toàn bộ thẻ Action", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -254,6 +296,13 @@ fun MainScreen(
         if (previousWorkingState && !isWorking) {
             val title = tabs.getOrNull(idx)?.title ?: "Cuộc trò chuyện"
             notifyTaskCompleted(title)
+
+            // Đánh dấu Chưa đọc cho tất cả các tab nền (không phải activeTabId)
+            tabs.forEachIndexed { i, t ->
+                if (t.id != activeTabId) {
+                    tabs[i] = t.copy(hasUnread = true)
+                }
+            }
         }
         previousWorkingState = isWorking
     }
@@ -592,7 +641,21 @@ fun MainScreen(
                             )
                         }
 
-
+                        // Nút Mở rộng thẻ Action của Agent
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .clickable { expandAllActions() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Code,
+                                contentDescription = "Mở tất cả thẻ Action",
+                                modifier = Modifier.size(15.dp),
+                                tint = Color(0xFF38BDF8)
+                            )
+                        }
 
                         // Nút Cài đặt
                         Box(
@@ -727,6 +790,13 @@ fun MainScreen(
                                                 strokeWidth = 2.dp,
                                                 color = Color(0xFFF59E0B)
                                             )
+                                        } else if (tab.hasUnread && !isActive) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFFEF4444))
+                                            )
                                         } else {
                                             Box(
                                                 modifier = Modifier
@@ -737,10 +807,10 @@ fun MainScreen(
                                         }
 
                                         Text(
-                                            text = if (tab.isWorking) "${tab.title} ⏳" else tab.title,
+                                            text = if (tab.isWorking) "${tab.title} ⏳" else if (tab.hasUnread && !isActive) "🔴 ${tab.title}" else tab.title,
                                             fontSize = 11.5.sp,
-                                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                                            color = if (isActive) textColor else textColor.copy(alpha = 0.6f),
+                                            fontWeight = if (isActive || (tab.hasUnread && !isActive)) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (isActive) textColor else if (tab.hasUnread && !isActive) Color(0xFFF87171) else textColor.copy(alpha = 0.6f),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -787,7 +857,7 @@ fun MainScreen(
                 }
             }
 
-            // VÙNG HIỂN THỊ WEBVIEW (Đã loại bỏ mọi Gesture đè, cuộn 120Hz mượt mà tuyệt đối)
+            // VÙNG HIỂN THỊ WEBVIEW (Animation vuốt mượt mà 120Hz)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -795,8 +865,31 @@ fun MainScreen(
             ) {
                 AgyWebView(
                     url = config.httpUrl,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = swipeOffsetX.value
+                            alpha = swipeAlpha.value
+                        },
                     isDarkTheme = isDarkTheme,
+                    onSwipeLeftDetected = {
+                        scope.launch {
+                            swipeOffsetX.animateTo(-65f, tween(90, easing = FastOutLinearInEasing))
+                            swipeAlpha.animateTo(0.65f, tween(90))
+                            swipeOffsetX.snapTo(65f)
+                            launch { swipeAlpha.animateTo(1f, tween(160)) }
+                            swipeOffsetX.animateTo(0f, tween(160, easing = FastOutSlowInEasing))
+                        }
+                    },
+                    onSwipeRightDetected = {
+                        scope.launch {
+                            swipeOffsetX.animateTo(65f, tween(90, easing = FastOutLinearInEasing))
+                            swipeAlpha.animateTo(0.65f, tween(90))
+                            swipeOffsetX.snapTo(-65f)
+                            launch { swipeAlpha.animateTo(1f, tween(160)) }
+                            swipeOffsetX.animateTo(0f, tween(160, easing = FastOutSlowInEasing))
+                        }
+                    },
                     onPageStarted = { currentUrl ->
                         isLoading = true
                         addLog("NAV", "Bắt đầu tải: $currentUrl", false)
