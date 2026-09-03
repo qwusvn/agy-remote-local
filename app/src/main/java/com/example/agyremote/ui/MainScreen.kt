@@ -1,42 +1,32 @@
 package com.example.agyremote.ui
 
-import android.Manifest
-import android.app.PendingIntent
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.compose.runtime.DisposableEffect
 import android.webkit.ValueCallback
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,92 +34,55 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import android.provider.Settings
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import com.example.agyremote.MainActivity
-import com.example.agyremote.R
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.agyremote.data.ConnectionConfig
 import com.example.agyremote.data.ConnectionPreferences
 import com.example.agyremote.media.ImageOptimizer
 import com.example.agyremote.service.AgyNotificationService
+import com.example.agyremote.ui.components.LogsBottomSheet
+import com.example.agyremote.ui.components.TabBar
+import com.example.agyremote.ui.components.TopStatusBar
+import com.example.agyremote.ui.viewmodel.MainViewModel
+import com.example.agyremote.ui.webview.scripts.AgyActionScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.graphics.graphicsLayer
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
 
 data class BrowserTab(
     val id: String,
@@ -146,16 +99,21 @@ data class LogItem(
     val isError: Boolean
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     config: ConnectionConfig = ConnectionConfig(),
     preferences: ConnectionPreferences = ConnectionPreferences(LocalContext.current),
-    isDarkTheme: Boolean = true
+    isDarkTheme: Boolean = true,
+    viewModel: MainViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+
+    val tabs by viewModel.tabs.collectAsState()
+    val activeTabId by viewModel.activeTabId.collectAsState()
+    val logItems by viewModel.logItems.collectAsState()
+    val errorCount by viewModel.errorCount.collectAsState()
 
     var showConnectionDialog by remember { mutableStateOf(false) }
     var showLogsSheet by remember { mutableStateOf(false) }
@@ -165,26 +123,15 @@ fun MainScreen(
     var isFullscreen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Quản lý Đa Tab trình duyệt
-    val tabs = remember { mutableStateListOf<BrowserTab>() }
-    var activeTabId by remember { mutableStateOf("") }
     var previousWorkingState by remember { mutableStateOf(false) }
 
     // Animation trượt mượt mà khi vuốt chuyển màn hình
     val swipeOffsetX = remember { Animatable(0f) }
     val swipeAlpha = remember { Animatable(1f) }
 
-    // Khởi tạo tab đầu tiên khi mở app
+    // Khởi tạo tab đầu tiên khi nạp cấu hình URL
     LaunchedEffect(config.httpUrl) {
-        if (tabs.isEmpty() && config.httpUrl.isNotBlank()) {
-            val initialTab = BrowserTab(
-                id = UUID.randomUUID().toString(),
-                title = "Dự án / Phiên",
-                url = config.httpUrl
-            )
-            tabs.add(initialTab)
-            activeTabId = initialTab.id
-        }
+        viewModel.initInitialTab(config.httpUrl)
     }
 
     // Xử lý mở thẳng vào phiên khi người dùng bấm vào Thông báo phiên trên Android
@@ -193,26 +140,12 @@ fun MainScreen(
         val targetUrl = activity?.intent?.getStringExtra("EXTRA_TARGET_URL")
         if (!targetUrl.isNullOrBlank()) {
             activity.intent.removeExtra("EXTRA_TARGET_URL")
-            val existingTab = tabs.find { it.url == targetUrl }
-            if (existingTab != null) {
-                activeTabId = existingTab.id
-                webViewInstance?.loadUrl(targetUrl)
-            } else {
-                val newTab = BrowserTab(
-                    id = UUID.randomUUID().toString(),
-                    title = "Phiên thông báo",
-                    url = targetUrl,
-                    isWorking = false,
-                    hasUnread = false
-                )
-                tabs.add(newTab)
-                activeTabId = newTab.id
-                webViewInstance?.loadUrl(targetUrl)
-            }
+            val targetTab = viewModel.handleNotificationIntent(targetUrl)
+            webViewInstance?.loadUrl(targetTab.url)
         }
     }
 
-    // Lắng nghe cập nhật phiên Realtime ngầm từ AgyNotificationService (không cần chạm tay)
+    // Lắng nghe cập nhật phiên Realtime ngầm từ Service
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -220,18 +153,13 @@ fun MainScreen(
                 val isWorking = intent.getBooleanExtra("isWorking", false)
                 val convoId = intent.getStringExtra("convoId") ?: ""
 
-                tabs.forEachIndexed { i, t ->
-                    if ((convoId.isNotBlank() && t.url.contains(convoId)) || t.title.equals(title, ignoreCase = true)) {
-                        val isCurrentActive = t.id == activeTabId
-                        tabs[i] = t.copy(
-                            title = title,
-                            isWorking = isWorking,
-                            hasUnread = if (!isCurrentActive && !isWorking) true else t.hasUnread
-                        )
-                    }
-                }
+                viewModel.handleSessionUpdate(convoId, title, isWorking)
+
                 // Đánh thức rendering engine của WebView cập nhật realtime ngay lập tức
-                webViewInstance?.evaluateJavascript("try { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('visibilitychange')); } catch(e) {}", null)
+                webViewInstance?.evaluateJavascript(
+                    "try { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('visibilitychange')); } catch(e) {}",
+                    null
+                )
             }
         }
         val filter = IntentFilter("com.example.agyremote.SESSION_UPDATE")
@@ -245,77 +173,9 @@ fun MainScreen(
         }
     }
 
-    fun createNewTab(url: String = config.httpUrl) {
-        val newTab = BrowserTab(
-            id = UUID.randomUUID().toString(),
-            title = "Dự án / Phiên",
-            url = url,
-            isWorking = false,
-            hasUnread = false
-        )
-        tabs.add(newTab)
-        activeTabId = newTab.id
-        webViewInstance?.loadUrl(url)
-        webViewInstance?.postDelayed({
-            navigateToProjects(webViewInstance)
-        }, 350)
-    }
-
-    fun closeTab(tabId: String) {
-        if (tabs.size > 1) {
-            val idx = tabs.indexOfFirst { it.id == tabId }
-            if (idx >= 0) {
-                tabs.removeAt(idx)
-                if (activeTabId == tabId) {
-                    val nextTab = tabs.getOrNull(idx) ?: tabs.last()
-                    activeTabId = nextTab.id
-                    webViewInstance?.loadUrl(nextTab.url)
-                }
-            }
-        }
-    }
-
-    fun selectTab(tab: BrowserTab) {
-        val idx = tabs.indexOfFirst { it.id == tab.id }
-        if (idx >= 0) {
-            tabs[idx] = tabs[idx].copy(hasUnread = false)
-        }
-        if (activeTabId != tab.id) {
-            activeTabId = tab.id
-            webViewInstance?.loadUrl(tab.url)
-        }
-    }
-
-    // Mở rộng toàn bộ các thẻ hành động (Tool Actions) của Agent
-    fun expandAllActions() {
-        val js = """
-            (function() {
-                const triggers = document.querySelectorAll('[data-testid="worked-for-collapsible"], [class*="worked-for"] button, button[aria-expanded="false"]');
-                triggers.forEach(btn => {
-                    const text = (btn.innerText || btn.textContent || '').trim();
-                    if (text.includes('Worked for') || text.includes('Generation Steps') || text.includes('step') || text.includes('action')) {
-                        const actualBtn = btn.tagName === 'BUTTON' ? btn : (btn.querySelector('button, [role="button"]') || btn);
-                        if (actualBtn && actualBtn.getAttribute('aria-expanded') !== 'true') {
-                            actualBtn.click();
-                        }
-                    }
-                });
-                document.querySelectorAll('.tool-viewer-card').forEach(c => {
-                    c.style.display = 'block';
-                    c.style.visibility = 'visible';
-                });
-            })();
-        """.trimIndent()
-        webViewInstance?.evaluateJavascript(js) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            Toast.makeText(context, "⚡ Đã mở rộng toàn bộ thẻ Action", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     // Phát chuông, rung và bắn Notification khi hoàn thành tác vụ
     fun notifyTaskCompleted(taskTitle: String) {
         try {
-            // 1. Rung điện thoại
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 vibratorManager?.defaultVibrator
@@ -330,12 +190,10 @@ fun MainScreen(
                 vibrator?.vibrate(450)
             }
 
-            // 2. Phát âm thanh chuông thông báo
             val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val ringtone = RingtoneManager.getRingtone(context, alertUri)
             ringtone?.play()
 
-            // 3. Bắn Notification Heads-up lên Android
             AgyNotificationService.showPushNotification(
                 context,
                 "🎉 Agent đã hoàn thành tác vụ!",
@@ -348,48 +206,25 @@ fun MainScreen(
 
     // Xử lý sự kiện thay đổi trạng thái Working từ WebView
     fun handleWorkingStatusChanged(isWorking: Boolean) {
-        val idx = tabs.indexOfFirst { it.id == activeTabId }
-        if (idx >= 0) {
-            tabs[idx] = tabs[idx].copy(isWorking = isWorking)
-        }
+        viewModel.updateActiveTabWorking(isWorking)
 
-        // Nếu vừa chuyển từ đang làm việc sang hoàn tất -> Báo chuông / rung
         if (previousWorkingState && !isWorking) {
-            val title = tabs.getOrNull(idx)?.title ?: "Cuộc trò chuyện"
-            notifyTaskCompleted(title)
-
-            // Đánh dấu Chưa đọc cho tất cả các tab nền (không phải activeTabId)
-            tabs.forEachIndexed { i, t ->
-                if (t.id != activeTabId) {
-                    tabs[i] = t.copy(hasUnread = true)
-                }
-            }
+            val currentTab = tabs.find { it.id == activeTabId }
+            notifyTaskCompleted(currentTab?.title ?: "Cuộc trò chuyện")
         }
         previousWorkingState = isWorking
     }
 
-    // Danh sách lưu log
-    val logItems = remember { mutableStateListOf<LogItem>() }
-    val timeFormat = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()) }
-
-    fun addLog(tag: String, msg: String, isError: Boolean) {
-        val item = LogItem(
-            time = timeFormat.format(Date()),
-            tag = tag,
-            message = msg,
-            isError = isError
-        )
-        if (logItems.size > 200) {
-            logItems.removeAt(0)
+    // Mở rộng toàn bộ các thẻ hành động (Tool Actions)
+    fun expandAllActions() {
+        webViewInstance?.evaluateJavascript(AgyActionScript.getForceExpandScript()) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            Toast.makeText(context, "⚡ Đã mở rộng toàn bộ thẻ Action", Toast.LENGTH_SHORT).show()
         }
-        logItems.add(item)
     }
 
-    val errorCount = logItems.count { it.isError }
-
-    // Quản lý callback chọn file cho WebView
+    // Xử lý file/photo picker
     var activeFilePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { selectedUri ->
@@ -398,587 +233,251 @@ fun MainScreen(
 
         if (selectedUri == null) {
             callback?.onReceiveValue(null)
-        } else {
-            scope.launch {
-                val optimizedUri = ImageOptimizer.optimizeImage(context, selectedUri)
-                if (optimizedUri != null) {
+            return@rememberLauncherForActivityResult
+        }
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val optimizedUri = ImageOptimizer.optimizeImage(context, selectedUri) ?: selectedUri
+                withContext(Dispatchers.Main) {
                     callback?.onReceiveValue(arrayOf(optimizedUri))
-                } else {
+                    viewModel.addLog("UPLOAD", "Đã chọn ảnh: ${optimizedUri.lastPathSegment}", false)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
                     callback?.onReceiveValue(arrayOf(selectedUri))
+                    viewModel.addLog("UPLOAD_ERR", "Lỗi nén ảnh: ${e.message}", true)
                 }
             }
         }
     }
 
-    // Quản lý Clipboard ảnh
-    val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
-    var clipboardImageUri by remember { mutableStateOf<Uri?>(null) }
-
-    fun checkClipboard(): Uri? {
-        val clip = clipboardManager.primaryClip ?: return null
-        if (clip.itemCount > 0) {
-            val item = clip.getItemAt(0)
-            val uri = item.uri
-            if (uri != null) {
-                val mime = context.contentResolver.getType(uri)
-                if (mime?.startsWith("image/") == true) {
-                    return uri
-                }
-            }
+    // Xử lý Clipboard Image
+    fun getClipboardImageUri(): Uri? {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = clipboard?.primaryClip
+        if (clip != null && clip.itemCount > 0) {
+            return clip.getItemAt(0).uri
         }
         return null
     }
 
+    var clipboardImageUri by remember { mutableStateOf<Uri?>(null) }
     LaunchedEffect(Unit) {
-        while (true) {
-            clipboardImageUri = checkClipboard()
-            delay(3000L)
-        }
+        clipboardImageUri = getClipboardImageUri()
     }
 
     fun pasteClipboardImage() {
-        val uri = clipboardImageUri ?: checkClipboard()
-        if (uri != null) {
-            scope.launch {
-                try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val cacheFile = File(context.cacheDir, "clip_paste_${System.currentTimeMillis()}.png")
-                    inputStream?.use { input ->
-                        cacheFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    val fileUri = Uri.fromFile(cacheFile)
+        val uri = clipboardImageUri ?: getClipboardImageUri()
+        if (uri == null) {
+            Toast.makeText(context, "Clipboard không có hình ảnh", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                    if (activeFilePathCallback != null) {
-                        activeFilePathCallback?.onReceiveValue(arrayOf(fileUri))
-                        activeFilePathCallback = null
-                        snackbarHostState.showSnackbar("✅ Đã đính kèm ảnh từ clipboard!")
-                    } else {
-                        val clickAttachJs = """
-                            (function() {
-                                const attachBtn = document.querySelector('button[aria-label*="attach" i], button[aria-label*="upload" i], input[type="file"]');
-                                if (attachBtn) { attachBtn.click(); }
-                            })();
-                        """.trimIndent()
-                        webViewInstance?.evaluateJavascript(clickAttachJs, null)
-                        snackbarHostState.showSnackbar("📋 Đã sao chép ảnh! Nhấn đính kèm (+) trong chat để dán.")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val optimizedUri = ImageOptimizer.optimizeImage(context, uri)
+                withContext(Dispatchers.Main) {
+                    if (optimizedUri != null) {
+                        Toast.makeText(context, "Đã chuẩn bị ảnh thành công", Toast.LENGTH_SHORT).show()
+                        viewModel.addLog("CLIPBOARD", "Đã dán ảnh từ clipboard", false)
                     }
-                } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("⚠️ Lỗi đọc ảnh clipboard: ${e.message}")
                 }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Lỗi đọc ảnh clipboard: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Điều hướng Native
+    fun toggleAgySidebar(webView: WebView?) {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        scope.launch {
+            swipeOffsetX.animateTo(-50f, animationSpec = tween(70, easing = FastOutLinearInEasing))
+            swipeOffsetX.animateTo(0f, animationSpec = tween(140, easing = FastOutSlowInEasing))
+        }
+        val js = """
+            (function() {
+                const currentPath = window.location.pathname;
+                if (currentPath.startsWith('/c/') || currentPath.startsWith('/history')) {
+                    const backBtn = document.querySelector('button[aria-label="Back" i], button[aria-label="Quay lại" i], header button:first-child');
+                    if (backBtn) { backBtn.click(); return; }
+                    const homeLink = document.querySelector('a[href="/"], a[href="#/"]');
+                    if (homeLink) { homeLink.click(); return; }
+                    window.location.href = '/';
+                } else {
+                    const lastConvo = window.__agyLastActiveConvo || localStorage.getItem('agy_last_active_convo');
+                    if (lastConvo && lastConvo.startsWith('/c/')) {
+                        window.location.href = lastConvo;
+                        return;
+                    }
+                    const firstConvo = document.querySelector('a[href^="/c/"], div[class*="conversation-item"], [data-testid*="conversation-item"]');
+                    if (firstConvo) { firstConvo.click(); }
+                }
+            })();
+        """.trimIndent()
+        webView?.evaluateJavascript(js, null)
+    }
+
+    fun navigateToProjects(webView: WebView?) {
+        val js = """
+            (function() {
+                const homeLink = document.querySelector('a[href="/"], a[href="#/"]');
+                if (homeLink) { homeLink.click(); return; }
+                if (window.location.pathname !== '/') { window.location.href = '/'; }
+            })();
+        """.trimIndent()
+        webView?.evaluateJavascript(js, null)
+    }
+
+    fun submitAuthCodeToHost(code: String) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("http://${config.hostIp}:${config.port}/__agy_oauth_code")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+
+                val body = """{"code":"$code"}"""
+                OutputStreamWriter(conn.outputStream).use { it.write(body); it.flush() }
+
+                val respCode = conn.responseCode
+                withContext(Dispatchers.Main) {
+                    if (respCode == 200) {
+                        viewModel.addLog("AUTH", "Đã gửi mã xác thực lên Host thành công", false)
+                        snackbarHostState.showSnackbar("Đăng nhập thành công! Đang tải lại...")
+                        delay(1200)
+                        webViewInstance?.loadUrl(config.httpUrl)
+                    } else {
+                        viewModel.addLog("AUTH_ERR", "Host trả về lỗi: $respCode", true)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    viewModel.addLog("AUTH_ERR", "Lỗi gửi Auth code: ${e.message}", true)
+                }
+            }
+        }
+    }
+
+    // Xử lý nút Back của Android
+    BackHandler(enabled = true) {
+        if (webViewInstance?.canGoBack() == true) {
+            webViewInstance?.goBack()
+        } else if (tabs.size > 1) {
+            val nextTab = viewModel.closeTab(activeTabId)
+            if (nextTab != null) {
+                webViewInstance?.loadUrl(nextTab.url)
             }
         } else {
-            scope.launch {
-                snackbarHostState.showSnackbar("ℹ️ Không tìm thấy ảnh trong bộ nhớ tạm (Clipboard)")
-            }
+            activity?.moveTaskToBack(true)
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { }
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
-
-    LaunchedEffect(config.hostIp, config.port, config.notificationsEnabled) {
-        try {
-            if (config.notificationsEnabled && config.hostIp.isNotBlank()) {
-                AgyNotificationService.start(context, config.hostIp, config.port)
-            } else {
-                AgyNotificationService.stop(context)
-            }
-        } catch (e: Exception) {
-            addLog("NOTIF_ERR", e.message ?: "Lỗi service", true)
-        }
-    }
-
-    // Hàm mở luồng Đổi tài khoản Google qua Bridge
-    fun startSwitchAccountFlow() {
-        scope.launch {
-            snackbarHostState.showSnackbar("Đang mở trang đăng nhập Google...")
-            addLog("AUTH", "Khởi động luồng đổi tài khoản Google qua Bridge", false)
-            // Xóa sạch cookie để Google bắt buộc hiển thị màn hình chọn tài khoản
-            try {
-                val cookieManager = android.webkit.CookieManager.getInstance()
-                cookieManager.removeAllCookies(null)
-                cookieManager.flush()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            val authUrl = "http://${config.hostIp}:${config.port}/auth/google"
-            webViewInstance?.loadUrl(authUrl)
-        }
-    }
-
-    // Tự động nạp Authorization Code bắt được từ Google OAuth lên máy tính
-    fun submitAuthCodeToHost(code: String) {
-        scope.launch {
-            snackbarHostState.showSnackbar("Đang tự động nạp mã xác thực vào máy tính...")
-            addLog("AUTO_AUTH", "Bắt đầu gửi code lên http://${config.hostIp}:${config.port}/api/auth_code", false)
-            val success = withContext(Dispatchers.IO) {
-                try {
-                    val url = URL("http://${config.hostIp}:${config.port}/api/auth_code")
-                    val conn = url.openConnection() as HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.doOutput = true
-                    conn.connectTimeout = 10000
-                    conn.readTimeout = 10000
-
-                    val jsonBody = """{"code":"$code"}"""
-                    OutputStreamWriter(conn.outputStream).use { it.write(jsonBody) }
-
-                    val responseCode = conn.responseCode
-                    conn.disconnect()
-                    responseCode in 200..299
-                } catch (e: Exception) {
-                    addLog("AUTO_AUTH_ERR", e.message ?: "Lỗi gửi code", true)
-                    false
-                }
-            }
-
-            if (success) {
-                snackbarHostState.showSnackbar("✅ Đã đổi tài khoản thành công! Đang tải lại Antigravity...")
-                addLog("AUTO_AUTH_OK", "Máy tính đã nhận mã xác thực và restart server. Đang tải lại...", false)
-                delay(2000L)
-                webViewInstance?.loadUrl(config.httpUrl)
-            } else {
-                snackbarHostState.showSnackbar("⚠️ Không thể tự nạp mã lên cổng ${config.port}. Bạn có thể kiểm tra log.")
-            }
-        }
-    }
-
-    // Theme Colors
-    val barBgColor = if (isDarkTheme) Color(0xFF13141C) else Color(0xFFF1F5F9)
-    val tabRowBgColor = if (isDarkTheme) Color(0xFF1A1C28) else Color(0xFFE2E8F0)
-    val tabActiveBgColor = if (isDarkTheme) Color(0xFF252838) else Color(0xFFFFFFFF)
-    val tabInactiveBgColor = Color.Transparent
-    val textColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
-    val currentTabIsWorking = tabs.firstOrNull { it.id == activeTabId }?.isWorking == true
+    val currentTab = tabs.find { it.id == activeTabId }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-    ) { innerPadding ->
+        containerColor = Color(0xFF0F172A)
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(paddingValues)
         ) {
-            // DÒNG 1: TRẠNG THÁI & CÔNG CỤ (30dp) - Có thể thu gọn khi người dùng bấm nút ^
-            AnimatedVisibility(visible = !isFullscreen) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(30.dp)
-                        .background(barBgColor)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Bên trái: Trạng thái kết nối & Chỉ báo Working
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (currentTabIsWorking) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(10.dp),
-                                strokeWidth = 1.8.dp,
-                                color = Color(0xFFF59E0B)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF22C55E))
-                            )
-                        }
+            // 1. THANH STATUSBAR 1 (TOP STATUS BAR)
+            TopStatusBar(
+                hostIp = config.hostIp,
+                port = config.port,
+                isWorking = currentTab?.isWorking == true,
+                isCollapsed = isFullscreen,
+                errorCount = errorCount,
+                clipboardImageUri = clipboardImageUri,
+                onPasteClipboardImage = { pasteClipboardImage() },
+                onShowLogs = { showLogsSheet = true },
+                onRefresh = {
+                    errorMessage = null
+                    isLoading = true
+                    webViewInstance?.reload()
+                },
+                onExpandActions = { expandAllActions() },
+                onOpenSettings = { showConnectionDialog = true },
+                onToggleCollapse = { isFullscreen = true },
+                modifier = Modifier.statusBarsPadding()
+            )
 
-                        Text(
-                            text = "AGY",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor
-                        )
-
-                        Text(
-                            text = "${config.hostIp}:${config.port}",
-                            fontSize = 10.sp,
-                            color = textColor.copy(alpha = 0.5f),
-                            fontFamily = FontFamily.Monospace
-                        )
+            // 2. THANH STATUSBAR 2 (TAB BAR)
+            TabBar(
+                tabs = tabs,
+                activeTabId = activeTabId,
+                isFullscreen = isFullscreen,
+                onSelectTab = { tab ->
+                    if (activeTabId != tab.id) {
+                        viewModel.selectTab(tab)
+                        webViewInstance?.loadUrl(tab.url)
                     }
-
-                    // Bên phải: Các nút công cụ thao tác
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        // Nút Dán ảnh từ Clipboard
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { pasteClipboardImage() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            BadgedBox(
-                                badge = {
-                                    if (clipboardImageUri != null) {
-                                        Badge(
-                                            containerColor = Color(0xFF22C55E),
-                                            modifier = Modifier.size(5.dp)
-                                        )
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Default.Image,
-                                    contentDescription = "Gửi ảnh Clipboard",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = if (clipboardImageUri != null) Color(0xFF22C55E) else textColor.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-
-                        // Nút xem Log ADB
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { showLogsSheet = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            BadgedBox(
-                                badge = {
-                                    if (errorCount > 0) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(5.dp)
-                                        )
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Default.BugReport,
-                                    contentDescription = "Xem Log ADB",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = if (errorCount > 0) MaterialTheme.colorScheme.error else textColor.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-
-                        // Nút Tải lại trang
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable {
-                                    errorMessage = null
-                                    isLoading = true
-                                    webViewInstance?.reload()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Tải lại trang",
-                                modifier = Modifier.size(14.dp),
-                                tint = textColor.copy(alpha = 0.65f)
-                            )
-                        }
-
-                        // Nút Mở rộng thẻ Action của Agent
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { expandAllActions() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Code,
-                                contentDescription = "Mở tất cả thẻ Action",
-                                modifier = Modifier.size(15.dp),
-                                tint = Color(0xFF38BDF8)
-                            )
-                        }
-
-                        // Nút Cài đặt
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { showConnectionDialog = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "Cài đặt kết nối",
-                                modifier = Modifier.size(14.dp),
-                                tint = textColor.copy(alpha = 0.65f)
-                            )
-                        }
-
-                        // Nút Thu gọn Dòng 1
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { isFullscreen = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Thu gọn Dòng 1",
-                                modifier = Modifier.size(16.dp),
-                                tint = textColor.copy(alpha = 0.65f)
-                            )
-                        }
+                },
+                onCloseTab = { tabId ->
+                    val nextTab = viewModel.closeTab(tabId)
+                    if (nextTab != null) {
+                        webViewInstance?.loadUrl(nextTab.url)
                     }
-                }
-            }
+                },
+                onAddTab = {
+                    val newTab = viewModel.createNewTab(config.httpUrl)
+                    webViewInstance?.loadUrl(newTab.url)
+                    webViewInstance?.postDelayed({
+                        navigateToProjects(webViewInstance)
+                    }, 350)
+                },
+                onToggleSidebar = { toggleAgySidebar(webViewInstance) },
+                onRestoreFullscreen = { isFullscreen = false }
+            )
 
-            // DÒNG 2: THANH STATUSBAR 2 (TAB BAR) - CỐ ĐỊNH HOÀN TOÀN, KHÔNG THỂ ẨN
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (isFullscreen) Modifier.statusBarsPadding() else Modifier)
-                    .height(44.dp)
-                    .background(tabRowBgColor)
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 1. Nút Menu Toggle Dự án/phiên - Phiên đang mở (Rộng 42dp, icon 22dp không bị cấn tay)
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            toggleAgySidebar(webViewInstance)
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Menu,
-                        contentDescription = "Chuyển đổi Dự án / Phiên đang mở",
-                        modifier = Modifier.size(22.dp),
-                        tint = textColor.copy(alpha = 0.9f)
-                    )
-                }
-
-                // Nếu Dòng 1 đang bị ẩn, hiện nút nhỏ để khôi phục Dòng 1
-                if (isFullscreen) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .clickable { isFullscreen = false },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Hiện lại thanh trạng thái",
-                            modifier = Modifier.size(16.dp),
-                            tint = textColor.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // 2. Danh sách các Tab (Tối đa 3 tab/màn hình, từ tab thứ 4 cần vuốt ngang)
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    val availableWidth = maxWidth - 44.dp
-                    val singleTabWidth = (availableWidth / 3f).coerceAtLeast(80.dp)
-
-                    LazyRow(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        items(tabs, key = { it.id }) { tab ->
-                            val isActive = tab.id == activeTabId
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isActive) tabActiveBgColor else tabInactiveBgColor,
-                                modifier = Modifier
-                                    .width(singleTabWidth)
-                                    .height(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .combinedClickable(
-                                        onClick = { selectTab(tab) },
-                                        onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Toast.makeText(context, "📑 ${tab.title}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        if (tab.isWorking) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(11.dp),
-                                                strokeWidth = 2.dp,
-                                                color = Color(0xFFF59E0B)
-                                            )
-                                        } else if (tab.hasUnread && !isActive) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFFEF4444))
-                                            )
-                                        } else {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(7.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (isActive) Color(0xFF22C55E) else Color.Gray.copy(alpha = 0.45f))
-                                            )
-                                        }
-
-                                        Text(
-                                            text = if (tab.isWorking) "${tab.title} ⏳" else if (tab.hasUnread && !isActive) "🔴 ${tab.title}" else tab.title,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = if (isActive || (tab.hasUnread && !isActive)) FontWeight.SemiBold else FontWeight.Normal,
-                                            color = if (isActive) textColor else if (tab.hasUnread && !isActive) Color(0xFFF87171) else textColor.copy(alpha = 0.6f),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-
-                                    if (tabs.size > 1) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .clickable { closeTab(tab.id) },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = "Đóng tab",
-                                                modifier = Modifier.size(12.dp),
-                                                tint = textColor.copy(alpha = 0.5f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Nút thêm tab mới (+) rộng rãi không bị cấn tay
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .clickable { createNewTab() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "Mở tab mới",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = textColor.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // VÙNG HIỂN THỊ WEBVIEW (Animation vuốt mượt mà 120Hz)
+            // 3. VÙNG HIỂN THỊ NỘI DUNG WEBVIEW VÀ GESTURES
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .graphicsLayer {
+                        translationX = swipeOffsetX.value
+                        alpha = swipeAlpha.value
+                    }
             ) {
                 AgyWebView(
-                    url = config.httpUrl,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = swipeOffsetX.value
-                            alpha = swipeAlpha.value
-                        },
+                    url = currentTab?.url ?: config.httpUrl,
+                    modifier = Modifier.fillMaxSize(),
                     isDarkTheme = isDarkTheme,
-                    onSwipeLeftDetected = {
-                        scope.launch {
-                            swipeOffsetX.animateTo(-65f, tween(90, easing = FastOutLinearInEasing))
-                            swipeAlpha.animateTo(0.65f, tween(90))
-                            swipeOffsetX.snapTo(65f)
-                            launch { swipeAlpha.animateTo(1f, tween(160)) }
-                            swipeOffsetX.animateTo(0f, tween(160, easing = FastOutSlowInEasing))
-                        }
-                    },
-                    onSwipeRightDetected = {
-                        scope.launch {
-                            swipeOffsetX.animateTo(65f, tween(90, easing = FastOutLinearInEasing))
-                            swipeAlpha.animateTo(0.65f, tween(90))
-                            swipeOffsetX.snapTo(-65f)
-                            launch { swipeAlpha.animateTo(1f, tween(160)) }
-                            swipeOffsetX.animateTo(0f, tween(160, easing = FastOutSlowInEasing))
-                        }
-                    },
-                    onPageStarted = { currentUrl ->
+                    onPageStarted = {
                         isLoading = true
-                        addLog("NAV", "Bắt đầu tải: $currentUrl", false)
+                        errorMessage = null
                     },
                     onPageFinished = { currentUrl ->
                         isLoading = false
                         errorMessage = null
-                        addLog("NAV", "Hoàn tất tải: $currentUrl", false)
+                        viewModel.addLog("NAV", "Hoàn tất tải: $currentUrl", false)
                     },
                     onTitleReceived = { title ->
-                        val idx = tabs.indexOfFirst { it.id == activeTabId }
-                        if (idx >= 0 && title.isNotBlank() && !title.startsWith("Antigravity", ignoreCase = true) && title != "about:blank") {
-                            tabs[idx] = tabs[idx].copy(title = title)
-                        }
+                        viewModel.updateSessionInfo("", title, config.httpUrl)
                     },
                     onWorkingStatusChanged = { isWorking ->
                         handleWorkingStatusChanged(isWorking)
                     },
                     onNavigationChanged = { screen ->
-                        addLog("NAV_VIEW", "Chuyển màn hình: $screen", false)
+                        viewModel.addLog("NAV_VIEW", "Chuyển màn hình: $screen", false)
                     },
                     onErrorReceived = { error ->
                         isLoading = false
                         errorMessage = error
-                        addLog("ERR", error, true)
+                        viewModel.addLog("ERR", error, true)
                     },
                     onLogReceived = { tag, msg, isError ->
-                        addLog(tag, msg, isError)
+                        viewModel.addLog(tag, msg, isError)
                     },
                     onAuthCodeCaptured = { code ->
                         submitAuthCodeToHost(code)
@@ -990,27 +489,22 @@ fun MainScreen(
                         )
                     },
                     onSessionInfoReceived = { path, title ->
-                        val idx = tabs.indexOfFirst { it.id == activeTabId }
-                        if (idx >= 0 && title.isNotBlank()) {
-                            val fullUrl = if (path.startsWith("http")) path else "${config.httpUrl.trimEnd('/')}$path"
-                            tabs[idx] = tabs[idx].copy(title = title, url = fullUrl)
-                        }
+                        viewModel.updateSessionInfo(path, title, config.httpUrl)
                     },
                     onWebViewCreated = { webView ->
                         webViewInstance = webView
                     }
                 )
 
-                // Banner lỗi
+                // Banner báo lỗi kết nối
                 if (errorMessage != null) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp)
-                            .align(Alignment.TopCenter),
-                        shape = RoundedCornerShape(12.dp),
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.errorContainer,
-                        tonalElevation = 6.dp
+                        shadowElevation = 4.dp
                     ) {
                         Row(
                             modifier = Modifier
@@ -1071,134 +565,28 @@ fun MainScreen(
         }
     }
 
-    // Modal BottomSheet hiển thị Log ADB thời gian thực
+    // Modal BottomSheet hiển thị Log ADB
     if (showLogsSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        val listState = rememberLazyListState()
-
-        LaunchedEffect(logItems.size) {
-            if (logItems.isNotEmpty()) {
-                listState.animateScrollToItem(logItems.size - 1)
-            }
-        }
-
-        ModalBottomSheet(
-            onDismissRequest = { showLogsSheet = false },
-            sheetState = sheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(480.dp)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "📋 Log ADB / Network (${logItems.size})",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Row {
-                        IconButton(onClick = {
-                            val allText = logItems.joinToString("\n") { "[${it.time}] [${it.tag}] ${it.message}" }
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("AGY_LOGS", allText))
-                            Toast.makeText(context, "Đã sao chép toàn bộ log", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Sao chép tất cả")
-                        }
-                        IconButton(onClick = { logItems.clear() }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Xóa log")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF0F172A)
-                ) {
-                    if (logItems.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Chưa có log nào", color = Color.Gray, fontSize = 13.sp)
-                        }
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(8.dp)
-                        ) {
-                            items(logItems) { item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = item.time,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF64748B),
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.width(80.dp)
-                                    )
-                                    Text(
-                                        text = "[${item.tag}]",
-                                        fontSize = 11.sp,
-                                        color = if (item.isError) Color(0xFFF87171) else Color(0xFF38BDF8),
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.width(90.dp)
-                                    )
-                                    Text(
-                                        text = item.message,
-                                        fontSize = 12.sp,
-                                        color = if (item.isError) Color(0xFFFCA5A5) else Color(0xFFE2E8F0),
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        LogsBottomSheet(
+            logItems = logItems,
+            onClearLogs = { viewModel.clearLogs() },
+            onDismiss = { showLogsSheet = false }
+        )
     }
 
+    // Hộp thoại cấu hình kết nối LAN
     if (showConnectionDialog) {
         ConnectionDialog(
             currentConfig = config,
             onDismiss = { showConnectionDialog = false },
-            onThemeChange = { theme ->
+            onConnect = { ip, port, autoReconnect, notificationsEnabled ->
                 scope.launch {
-                    preferences.setTheme(theme)
-                }
-            },
-            onSwitchAccount = {
-                startSwitchAccountFlow()
-            },
-            onConnect = { newIp, newPort, newAutoReconnect, newNotifications ->
-                scope.launch {
-                    preferences.saveHost(newIp, newPort)
-                    preferences.setAutoReconnect(newAutoReconnect)
-                    preferences.setNotificationsEnabled(newNotifications)
-                    errorMessage = null
-                    val newUrl = "http://$newIp:$newPort"
-                    webViewInstance?.loadUrl(newUrl)
-                    if (tabs.isNotEmpty()) {
-                        val idx = tabs.indexOfFirst { it.id == activeTabId }
-                        if (idx >= 0) {
-                            tabs[idx] = tabs[idx].copy(url = newUrl)
-                        }
-                    }
+                    preferences.saveHost(ip, port)
+                    preferences.setAutoReconnect(autoReconnect)
+                    preferences.setNotificationsEnabled(notificationsEnabled)
                     showConnectionDialog = false
+                    val newUrl = "http://$ip:$port"
+                    webViewInstance?.loadUrl(newUrl)
                 }
             }
         )

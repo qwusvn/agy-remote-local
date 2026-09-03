@@ -25,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.agyremote.ui.webview.scripts.AgyActionScript
+import com.example.agyremote.ui.webview.scripts.AgySessionScript
+import com.example.agyremote.ui.webview.scripts.AgyThemeScript
 
 private var lastNavTimestamp = 0L
 
@@ -318,215 +321,20 @@ fun AgyWebView(
                     onPageFinished(currentUrl)
                     onLogReceived("PAGE_FINISH", currentUrl, false)
 
-                    val themeScript = if (isDarkTheme) {
-                        "document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark';"
-                    } else {
-                        "document.documentElement.classList.remove('dark'); document.documentElement.style.colorScheme = 'light';"
-                    }
-
-                    // Inject Polyfill Chrome, Theme và Agent Status Monitor
+                    // Nạp Chrome Polyfill
                     view?.evaluateJavascript(
                         """
                         if (!window.chrome) {
                             window.chrome = { app: { isInstalled: false }, runtime: {} };
                         }
-                        $themeScript
-
-                        // CSS tối ưu hiển thị thẻ hành động (Tool Actions) và chuyển cảnh vuốt mượt mà
-                        (function() {
-                            const styleId = 'agy-action-viewer-styles';
-                            if (!document.getElementById(styleId)) {
-                                const style = document.createElement('style');
-                                style.id = styleId;
-                                style.textContent = `
-                                    /* Khôi phục và đảm bảo hiển thị thẻ Action của Agent */
-                                    [data-testid="worked-for-collapsible"],
-                                    .tool-viewer-card,
-                                    [class*="toolGroupCollapsible"],
-                                    [class*="terminalGroup"],
-                                    [data-testid*="tool-"] {
-                                        display: block !important;
-                                        visibility: visible !important;
-                                        opacity: 1 !important;
-                                        max-width: 100% !important;
-                                    }
-                                    .tool-viewer-card {
-                                        border: 1px solid rgba(148, 163, 184, 0.25) !important;
-                                        border-radius: 8px !important;
-                                        margin-top: 5px !important;
-                                        margin-bottom: 5px !important;
-                                        background-color: rgba(30, 41, 59, 0.45) !important;
-                                    }
-                                    /* Hiệu ứng chuyển động mượt mà cho Web Container */
-                                    main, [role="main"], #root, [class*="app-container"] {
-                                        transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                                    }
-                                `;
-                                document.head.appendChild(style);
-                            }
-                        })();
-
-                        // Tự động mở rộng và giữ hiển thị các thẻ Action (Tool Actions) trong tin nhắn
-                        (function() {
-                            function expandToolActions() {
-                                // 1. Tìm các nút Collapsible chứa Worked for hoặc Generation Steps
-                                const triggers = document.querySelectorAll('[data-testid="worked-for-collapsible"], [class*="worked-for"] button, button[aria-expanded="false"]');
-                                triggers.forEach(btn => {
-                                    const text = (btn.innerText || btn.textContent || '').trim();
-                                    if (text.includes('Worked for') || text.includes('Generation Steps') || text.includes('step') || text.includes('action')) {
-                                        const actualBtn = btn.tagName === 'BUTTON' ? btn : (btn.querySelector('button, [role="button"]') || btn);
-                                        if (actualBtn && actualBtn.getAttribute('aria-expanded') !== 'true') {
-                                            actualBtn.click();
-                                        }
-                                    }
-                                });
-
-                                // 2. Đảm bảo các thẻ tool-viewer-card được mở rộng nếu có nút toggle
-                                const toolCards = document.querySelectorAll('.tool-viewer-card');
-                                toolCards.forEach(card => {
-                                    card.style.display = 'block';
-                                    card.style.visibility = 'visible';
-                                });
-                            }
-
-                            if (!window.__agyExpandActionsInterval) {
-                                window.__agyExpandActionsInterval = setInterval(expandToolActions, 600);
-                            }
-                            expandToolActions();
-                        })();
-
-                        // Giám sát trạng thái Agent Working CHÍNH XÁC (vùng Chat Input & Generating Stream)
-                        (function() {
-                            let lastWorkingState = false;
-                            let consecutiveMatches = 0;
-                            let consecutiveAbsents = 0;
-
-                            function checkAgentStatus() {
-                                let isWorking = false;
-                                
-                                // 1. Kiểm tra nút Stop/Cancel trong vùng Chat Form
-                                const chatInput = document.querySelector('textarea, [contenteditable="true"], input[placeholder*="Ask" i]');
-                                if (chatInput) {
-                                    const chatContainer = chatInput.closest('form, div.relative, [class*="chat-input"], [class*="input-container"]') || document.body;
-                                    // Nút vuông stop hoặc nút có aria-label Stop/Cancel trong vùng chat
-                                    const stopBtn = chatContainer.querySelector('button[aria-label*="Stop" i], button[aria-label*="Cancel" i], button rect, button .lucide-square');
-                                    if (stopBtn) {
-                                        isWorking = true;
-                                    }
-                                }
-
-                                // 2. Kiểm tra nút Stop toàn cục nếu có aria-label chính xác
-                                if (!isWorking) {
-                                    const explicitStopBtn = document.querySelector('button[aria-label="Stop generation" i], button[aria-label="Stop" i], button[aria-label="Cancel" i]');
-                                    if (explicitStopBtn) {
-                                        isWorking = true;
-                                    }
-                                }
-
-                                // 3. Kiểm tra streaming active indicator trong message stream
-                                if (!isWorking) {
-                                    const streamActive = document.querySelector('[data-is-generating="true"], [class*="streaming-active"], [class*="thinking-bubble"]');
-                                    if (streamActive) {
-                                        isWorking = true;
-                                    }
-                                }
-
-                                // Lọc nhiễu / Debounce (Cần 2 chu kỳ 400ms xác nhận để tránh chớp nháy)
-                                if (isWorking) {
-                                    consecutiveMatches++;
-                                    consecutiveAbsents = 0;
-                                    if (consecutiveMatches >= 2 && !lastWorkingState) {
-                                        lastWorkingState = true;
-                                        if (window.AgyAndroidBridge) {
-                                            window.AgyAndroidBridge.reportWorkingStatus(true);
-                                        }
-                                    }
-                                } else {
-                                    consecutiveAbsents++;
-                                    consecutiveMatches = 0;
-                                    if (consecutiveAbsents >= 2 && lastWorkingState) {
-                                        lastWorkingState = false;
-                                        if (window.AgyAndroidBridge) {
-                                            window.AgyAndroidBridge.reportWorkingStatus(false);
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (!window.__agyMonitorInterval) {
-                                window.__agyMonitorInterval = setInterval(checkAgentStatus, 400);
-                            }
-
-                            // Theo dõi phiên đang mở (Active Conversation)
-                            function trackActiveConvo() {
-                                const p = window.location.pathname;
-                                if (p.startsWith('/c/')) {
-                                    window.__agyLastActiveConvo = p;
-                                    try { localStorage.setItem('agy_last_active_convo', p); } catch(e){}
-                                }
-                            }
-                            if (!window.__agyTrackInterval) {
-                                window.__agyTrackInterval = setInterval(trackActiveConvo, 500);
-                            }
-                            trackActiveConvo();
-
-                            // Báo cáo tiêu đề phiên THỰC TẾ cho Android Tab Bar (Khắc phục hoàn toàn Tab ngố)
-                            function reportCurrentSession() {
-                                const p = window.location.pathname;
-                                let title = '';
-                                if (p === '/' || p === '') {
-                                    title = 'Dự án / Phiên';
-                                } else if (p.startsWith('/c/')) {
-                                    // 1. Tiêu đề Header của cuộc trò chuyện (Bất kỳ text nào trong header không phải nút bấm)
-                                    const header = document.querySelector('header, [class*="header"], [role="banner"]');
-                                    if (header) {
-                                        const candidates = Array.from(header.querySelectorAll('h1, h2, h3, div, span'))
-                                            .filter(el => el.children.length === 0 && !el.closest('button') && el.innerText && el.innerText.trim().length > 1);
-                                        if (candidates.length > 0) {
-                                            title = candidates[0].innerText.trim();
-                                        }
-                                    }
-                                    // 2. Tiêu đề trong sidebar item đang được chọn
-                                    if (!title) {
-                                        const activeItem = document.querySelector('[class*="conversationItem"][class*="active"], [aria-selected="true"] [class*="title"], [data-active="true"]');
-                                        if (activeItem && activeItem.innerText) {
-                                            title = activeItem.innerText.trim().split('\n')[0];
-                                        }
-                                    }
-                                    // 3. Heading toàn cục
-                                    if (!title) {
-                                        const heading = document.querySelector('h1, [role="heading"]');
-                                        if (heading && heading.innerText && heading.innerText.trim().length > 1) {
-                                            title = heading.innerText.trim();
-                                        }
-                                    }
-                                    // 4. Dự phòng
-                                    if (!title) {
-                                        title = 'Phiên đang mở';
-                                    }
-                                } else if (p.startsWith('/history')) {
-                                    title = 'Lịch sử';
-                                }
-                                if (title && window.AgyAndroidBridge && window.AgyAndroidBridge.reportSessionInfo) {
-                                    window.AgyAndroidBridge.reportSessionInfo(p, title);
-                                }
-                            }
-                            if (!window.__agySessionTitleInterval) {
-                                window.__agySessionTitleInterval = setInterval(reportCurrentSession, 350);
-                            }
-                            reportCurrentSession();
-
-                            // Realtime DOM Watcher: Giữ giao diện luôn cập nhật ngầm tức thời không cần chạm tay
-                            if (!window.__agyRealtimeDomWatcher) {
-                                window.__agyRealtimeDomWatcher = new MutationObserver(() => {
-                                    reportCurrentSession();
-                                });
-                                window.__agyRealtimeDomWatcher.observe(document.body, { childList: true, subtree: true });
-                            }
-                        })();
                         """.trimIndent(),
                         null
                     )
+
+                    // Nạp từng module Script độc lập (được bọc trong try-catch riêng biệt, cách ly lỗi hoàn toàn)
+                    view?.evaluateJavascript(AgyThemeScript.getScript(), null)
+                    view?.evaluateJavascript(AgyActionScript.getScript(), null)
+                    view?.evaluateJavascript(AgySessionScript.getScript(), null)
 
                     checkAndExtractAuthCode(currentUrl)
                 }
