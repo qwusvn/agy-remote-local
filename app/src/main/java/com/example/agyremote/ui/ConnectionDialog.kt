@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NetworkCheck
@@ -62,6 +63,7 @@ fun ConnectionDialog(
     currentConfig: ConnectionConfig,
     onDismiss: () -> Unit,
     onThemeChange: (AppTheme) -> Unit = {},
+    onSwitchAccount: () -> Unit = {},
     onConnect: (ip: String, port: Int, autoReconnect: Boolean, notificationsEnabled: Boolean) -> Unit
 ) {
     var ipInput by remember { mutableStateOf(currentConfig.hostIp) }
@@ -366,6 +368,37 @@ fun ConnectionDialog(
                         }
                     }
                 }
+
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Tài khoản Antigravity", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Chuyển đổi tài khoản Google đang đăng nhập trên hệ thống",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                onDismiss()
+                                onSwitchAccount()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AccountCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("🔑 Đổi tài khoản Google")
+                        }
+                    }
+                }
+
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                 }

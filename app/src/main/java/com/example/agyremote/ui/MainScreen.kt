@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
@@ -386,6 +387,24 @@ fun MainScreen(
         }
     }
 
+    // Hàm mở luồng Đổi tài khoản Google qua Bridge
+    fun startSwitchAccountFlow() {
+        scope.launch {
+            snackbarHostState.showSnackbar("Đang mở trang đăng nhập Google...")
+            addLog("AUTH", "Khởi động luồng đổi tài khoản Google qua Bridge", false)
+            // Xóa sạch cookie để Google bắt buộc hiển thị màn hình chọn tài khoản
+            try {
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                cookieManager.removeAllCookies(null)
+                cookieManager.flush()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            val authUrl = "http://${config.hostIp}:${config.port}/auth/google"
+            webViewInstance?.loadUrl(authUrl)
+        }
+    }
+
     // Tự động nạp Authorization Code bắt được từ Google OAuth lên máy tính
     fun submitAuthCodeToHost(code: String) {
         scope.launch {
@@ -398,8 +417,8 @@ fun MainScreen(
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
                     conn.doOutput = true
-                    conn.connectTimeout = 5000
-                    conn.readTimeout = 5000
+                    conn.connectTimeout = 10000
+                    conn.readTimeout = 10000
 
                     val jsonBody = """{"code":"$code"}"""
                     OutputStreamWriter(conn.outputStream).use { it.write(jsonBody) }
@@ -414,9 +433,9 @@ fun MainScreen(
             }
 
             if (success) {
-                snackbarHostState.showSnackbar("✅ Đã kích hoạt máy tính thành công! Đang tải lại Antigravity...")
-                addLog("AUTO_AUTH_OK", "Máy tính đã nhận mã xác thực. Đang tải lại...", false)
-                delay(1000L)
+                snackbarHostState.showSnackbar("✅ Đã đổi tài khoản thành công! Đang tải lại Antigravity...")
+                addLog("AUTO_AUTH_OK", "Máy tính đã nhận mã xác thực và restart server. Đang tải lại...", false)
+                delay(2000L)
                 webViewInstance?.loadUrl(config.httpUrl)
             } else {
                 snackbarHostState.showSnackbar("⚠️ Không thể tự nạp mã lên cổng ${config.port}. Bạn có thể kiểm tra log.")
@@ -564,6 +583,22 @@ fun MainScreen(
                                 contentDescription = "Tải lại trang",
                                 modifier = Modifier.size(14.dp),
                                 tint = textColor.copy(alpha = 0.65f)
+                            )
+                        }
+
+                        // Nút Đổi tài khoản Google
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .clickable { startSwitchAccountFlow() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AccountCircle,
+                                contentDescription = "Đổi tài khoản Google",
+                                modifier = Modifier.size(15.dp),
+                                tint = textColor.copy(alpha = 0.75f)
                             )
                         }
 
@@ -996,6 +1031,9 @@ fun MainScreen(
                 scope.launch {
                     preferences.setTheme(theme)
                 }
+            },
+            onSwitchAccount = {
+                startSwitchAccountFlow()
             },
             onConnect = { newIp, newPort, newAutoReconnect, newNotifications ->
                 scope.launch {
