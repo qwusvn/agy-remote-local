@@ -586,21 +586,7 @@ fun MainScreen(
                             )
                         }
 
-                        // Nút Đổi tài khoản Google
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .clickable { startSwitchAccountFlow() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.AccountCircle,
-                                contentDescription = "Đổi tài khoản Google",
-                                modifier = Modifier.size(15.dp),
-                                tint = textColor.copy(alpha = 0.75f)
-                            )
-                        }
+
 
                         // Nút Cài đặt
                         Box(
@@ -818,17 +804,7 @@ fun MainScreen(
                         handleWorkingStatusChanged(isWorking)
                     },
                     onNavigationChanged = { screen ->
-                        scope.launch {
-                            val text = when (screen) {
-                                "projects" -> "📂 Màn hình Dự án / Phiên"
-                                "active_convo" -> "💬 Phiên đang hoạt động"
-                                "history" -> "📜 Lịch sử các phiên (History)"
-                                else -> ""
-                            }
-                            if (text.isNotEmpty()) {
-                                snackbarHostState.showSnackbar(text)
-                            }
-                        }
+                        addLog("NAV_VIEW", "Chuyển màn hình: $screen", false)
                     },
                     onErrorReceived = { error ->
                         isLoading = false

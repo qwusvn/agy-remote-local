@@ -11,38 +11,14 @@ const net = require('net');
 const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 
 const TARGET_HOST = '127.0.0.1';
-const TARGET_PORT = 4401;
+let currentTargetPort = 51896;
 const LISTEN_PORT = 4400;
 
-const OAUTH_CLIENT_ID = 'YOUR_GOOGLE_OAUTH_CLIENT_ID';
-const OAUTH_CLIENT_SECRET = 'YOUR_GOOGLE_OAUTH_CLIENT_SECRET';
-const OAUTH_REDIRECT_URI = 'https://antigravity.google/oauth-callback';
-const OAUTH_SCOPES = [
-  'https://www.googleapis.com/auth/cloud-platform',
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/userinfo.profile',
-  'https://www.googleapis.com/auth/cclog',
-  'https://www.googleapis.com/auth/experimentsandconfigs',
-  'https://www.googleapis.com/auth/aicode'
-].join(' ');
-
-let activeOAuthVerifier = 'YOUR_OAUTH_VERIFIER';
-
-function base64URLEncode(str) {
-  return str.toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-}
-
-function sha256(buffer) {
-  return crypto.createHash('sha256').update(buffer).digest();
-}
-
-let currentCsrfToken = 'fc99765f-816f-4f36-ae30-948c4a223397';
+let currentCsrfToken = 'cab57588-0fdb-48bf-8cc3-81389fe84f9c';
+let lastDetectedPid = 0;
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -56,21 +32,74 @@ function getLanIp() {
   return '192.168.1.220';
 }
 
-// Hàm cập nhật CSRF Token từ agy.exe
-function refreshCsrfToken() {
-  const req = http.get(`http://${TARGET_HOST}:${TARGET_PORT}/`, (res) => {
-    let body = '';
-    res.on('data', chunk => body += chunk);
-    res.on('end', () => {
-      const match = body.match(/"csrfToken":"([a-f0-9\-]+)"/);
-      if (match && match[1]) {
-        currentCsrfToken = match[1];
-        console.log(`[CSRF] Đồng bộ CSRF Token mới: ${currentCsrfToken}`);
-      }
-    });
-  });
-  req.on('error', () => {});
+function detectPcLanguageServer() {
+  try {
+    const psCmd = `powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'language_server.exe' -and $_.CommandLine -like '*--subclient_type*hub*' } | Select-Object -First 1; if ($p) { $ports = (Get-NetTCPConnection -OwningProcess $p.ProcessId -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort) -join ','; Write-Output ($p.ProcessId.ToString() + '|' + $p.CommandLine + '|' + $ports) }"`;
+    const out = execSync(psCmd, { encoding: 'utf8', timeout: 4000 }).trim();
+    if (!out) return null;
+
+    const [pidStr, cmdLine, portsStr] = out.split('|');
+    if (!pidStr || !portsStr) return null;
+
+    const csrfMatch = cmdLine.match(/--csrf_token\s+([a-f0-9\-]+)/);
+    const csrfToken = csrfMatch ? csrfMatch[1] : '';
+
+    const ports = portsStr.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+    return {
+      pid: parseInt(pidStr),
+      csrfToken: csrfToken,
+      candidatePorts: ports
+    };
+  } catch (e) {
+    return null;
+  }
 }
+
+async function findHttpPort(serverInfo) {
+  if (!serverInfo || !serverInfo.candidatePorts.length) return null;
+  for (const port of serverInfo.candidatePorts) {
+    const ok = await new Promise((resolve) => {
+      const req = http.get({
+        hostname: '127.0.0.1',
+        port: port,
+        path: '/',
+        headers: { 'x-codeium-csrf-token': serverInfo.csrfToken },
+        timeout: 1000
+      }, (res) => {
+        resolve(res.statusCode === 200);
+      });
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+    });
+    if (ok) return port;
+  }
+  return null;
+}
+
+async function syncTargetServer() {
+  const info = detectPcLanguageServer();
+  if (info) {
+    const httpPort = await findHttpPort(info);
+    if (httpPort) {
+      if (currentTargetPort !== httpPort || currentCsrfToken !== info.csrfToken) {
+        currentTargetPort = httpPort;
+        currentCsrfToken = info.csrfToken;
+        lastDetectedPid = info.pid;
+        console.log(`[SYNC PC] ✅ Đã kết nối với Language Server PC (PID: ${info.pid}, Port: ${httpPort}) - Tài khoản đồng bộ 100% với máy tính!`);
+      }
+      return;
+    }
+  }
+  // Dự phòng nếu không mở PC IDE: dùng agy.exe port 4401
+  if (currentTargetPort !== 4401) {
+    currentTargetPort = 4401;
+    console.log('[SYNC PC] Chuyển về Language Server dự phòng (Port: 4401)');
+  }
+}
+
+// Khởi động đồng bộ ban đầu và mỗi 3 giây
+syncTargetServer();
+setInterval(syncTargetServer, 3000);
 
 const SOURCE_DIR = 'C:\\Users\\qwusv\\.gemini\\antigravity';
 const CLI_DIR = 'C:\\Users\\qwusv\\.gemini\\antigravity-cli';
@@ -113,9 +142,7 @@ try {
 syncSummaries();
 setInterval(syncSummaries, 2000);
 
-// Khởi chạy cập nhật token ban đầu và mỗi 30 giây
-refreshCsrfToken();
-setInterval(refreshCsrfToken, 30000);
+
 
 const server = http.createServer((req, res) => {
   // 0. Xử lý yêu cầu Đổi tài khoản Google (/auth/google)
@@ -239,9 +266,9 @@ const server = http.createServer((req, res) => {
 
   // 1. Chuyển tiếp request tới target với dynamic CSRF token
   const headers = { ...req.headers };
-  headers['host'] = `${TARGET_HOST}:${TARGET_PORT}`;
+  headers['host'] = `${TARGET_HOST}:${currentTargetPort}`;
   if (headers['origin']) {
-    headers['origin'] = `http://${TARGET_HOST}:${TARGET_PORT}`;
+    headers['origin'] = `http://${TARGET_HOST}:${currentTargetPort}`;
   }
   
   // Nạp CSRF token mới nhất nếu client không gửi hoặc gửi token cũ
@@ -250,7 +277,7 @@ const server = http.createServer((req, res) => {
 
   const options = {
     hostname: TARGET_HOST,
-    port: TARGET_PORT,
+    port: currentTargetPort,
     path: req.url,
     method: req.method,
     headers: headers,
@@ -362,13 +389,13 @@ try {
 
 // Xử lý WebSocket Upgrade
 server.on('upgrade', (req, clientSocket, head) => {
-  const targetSocket = net.connect(TARGET_PORT, TARGET_HOST, () => {
+  const targetSocket = net.connect(currentTargetPort, TARGET_HOST, () => {
     let upgradeHeader = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
     for (const [key, value] of Object.entries(req.headers)) {
       if (key.toLowerCase() === 'host') {
-        upgradeHeader += `host: ${TARGET_HOST}:${TARGET_PORT}\r\n`;
+        upgradeHeader += `host: ${TARGET_HOST}:${currentTargetPort}\r\n`;
       } else if (key.toLowerCase() === 'origin') {
-        upgradeHeader += `origin: http://${TARGET_HOST}:${TARGET_PORT}\r\n`;
+        upgradeHeader += `origin: http://${TARGET_HOST}:${currentTargetPort}\r\n`;
       } else {
         upgradeHeader += `${key}: ${value}\r\n`;
       }
@@ -398,7 +425,7 @@ server.listen(LISTEN_PORT, '0.0.0.0', () => {
   console.log(`============================================================`);
   console.log(` [AGY LAN BRIDGE V5.0 - DYNAMIC CSRF + REALTIME SYNC]`);
   console.log(` -> Địa chỉ LAN: http://${lanIp}:${LISTEN_PORT}`);
-  console.log(` -> Chuyển tiếp: http://${TARGET_HOST}:${TARGET_PORT}`);
+  console.log(` -> Chuyển tiếp: http://${TARGET_HOST}:${currentTargetPort}`);
   console.log(` -> CSRF Token: ${currentCsrfToken}`);
   console.log(`============================================================`);
 });
