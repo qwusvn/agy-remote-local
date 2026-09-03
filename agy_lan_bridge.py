@@ -1,8 +1,7 @@
 """
-AGY LAN Bridge v2.0
-Tu dong rewrite Host va Origin sang 127.0.0.1:4400 de vuot qua co che bao mat
-Localhost-Only cua may chu Antigravity 2.0.
-Ho tro 100% Web UI, REST API, SSE, Image Upload va WebSocket hai chieu.
+AGY LAN Bridge v3.0 (Full Continuous Header Rewriter)
+Chuyen tiep lien tuc va tu dong sua Host: 127.0.0.1:4400 cho TAT CA cac HTTP requests (Keep-Alive)
+va WebSocket Handshake den tu thiet bi di dong / Android.
 """
 import socket
 import threading
@@ -12,6 +11,11 @@ import sys
 LOCAL_TARGET_HOST = "127.0.0.1"
 LOCAL_TARGET_PORT = 4400
 LISTEN_PORT = 4400
+
+HOST_PATTERN = re.compile(rb"(?i)\r\nHost:[^\r\n]+")
+ORIGIN_PATTERN = re.compile(rb"(?i)\r\nOrigin:[^\r\n]+")
+REPLACEMENT_HOST = f"\r\nHost: {LOCAL_TARGET_HOST}:{LOCAL_TARGET_PORT}".encode("latin1")
+REPLACEMENT_ORIGIN = f"\r\nOrigin: http://{LOCAL_TARGET_HOST}:{LOCAL_TARGET_PORT}".encode("latin1")
 
 def get_lan_ip():
     try:
@@ -23,58 +27,60 @@ def get_lan_ip():
     except Exception:
         return "192.168.1.220"
 
-def forward_raw(src, dst):
+def client_to_server(client_sock, server_sock):
+    is_websocket = False
     try:
         while True:
-            data = src.recv(65536)
+            data = client_sock.recv(65536)
             if not data:
                 break
-            dst.sendall(data)
+
+            if not is_websocket:
+                # Kiem tra xem co chua header Host khong va rewrite lien tuc cho moi HTTP request trong connection
+                if b"\r\nHost:" in data or b"\r\nhost:" in data:
+                    data = HOST_PATTERN.sub(REPLACEMENT_HOST, data)
+                    if b"\r\nOrigin:" in data or b"\r\norigin:" in data:
+                        data = ORIGIN_PATTERN.sub(REPLACEMENT_ORIGIN, data)
+
+                    if b"Upgrade: websocket" in data or b"upgrade: websocket" in data:
+                        is_websocket = True
+
+            server_sock.sendall(data)
     except Exception:
         pass
     finally:
-        try: src.close()
+        try: client_sock.close()
         except: pass
-        try: dst.close()
+        try: server_sock.close()
         except: pass
 
-def handle_client(client_socket):
-    server_socket = None
+def server_to_client(server_sock, client_sock):
     try:
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.connect((LOCAL_TARGET_HOST, LOCAL_TARGET_PORT))
+        while True:
+            data = server_sock.recv(65536)
+            if not data:
+                break
+            client_sock.sendall(data)
+    except Exception:
+        pass
+    finally:
+        try: server_sock.close()
+        except: pass
+        try: client_sock.close()
+        except: pass
 
-        # Doc header khoi tao tu client
-        initial_data = client_socket.recv(65536)
-        if not initial_data:
-            client_socket.close()
-            server_socket.close()
-            return
+def handle_client(client_sock):
+    try:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.connect((LOCAL_TARGET_HOST, LOCAL_TARGET_PORT))
 
-        # Rewrite Host va Origin header ve localhost de pass qua auth check
-        try:
-            text = initial_data.decode("latin1")
-            # Thay the Host: ... thanh Host: 127.0.0.1:4400
-            text = re.sub(r"(?i)\r\nHost:[^\r\n]+", f"\r\nHost: 127.0.0.1:{LOCAL_TARGET_PORT}", text)
-            # Thay the Origin: ... thanh Origin: http://127.0.0.1:4400 neu co
-            text = re.sub(r"(?i)\r\nOrigin:[^\r\n]+", f"\r\nOrigin: http://127.0.0.1:{LOCAL_TARGET_PORT}", text)
-            modified_data = text.encode("latin1")
-            server_socket.sendall(modified_data)
-        except Exception:
-            server_socket.sendall(initial_data)
-
-        # Chuyen tiep hai chieu duplex (WebSockets / Streams)
-        t1 = threading.Thread(target=forward_raw, args=(client_socket, server_socket), daemon=True)
-        t2 = threading.Thread(target=forward_raw, args=(server_socket, client_socket), daemon=True)
+        t1 = threading.Thread(target=client_to_server, args=(client_sock, server_sock), daemon=True)
+        t2 = threading.Thread(target=server_to_client, args=(server_sock, client_sock), daemon=True)
         t1.start()
         t2.start()
-    except Exception as e:
-        if client_socket:
-            try: client_socket.close()
-            except: pass
-        if server_socket:
-            try: server_socket.close()
-            except: pass
+    except Exception:
+        try: client_sock.close()
+        except: pass
 
 def main():
     lan_ip = get_lan_ip()
@@ -84,21 +90,15 @@ def main():
     try:
         server.bind((lan_ip, LISTEN_PORT))
     except Exception as e:
-        print(f"Loi khi bind vao {lan_ip}:{LISTEN_PORT}: {e}")
-        try:
-            server.bind(("0.0.0.0", 4401))
-            lan_ip = "0.0.0.0"
-            print("Fallback sang cong 4401")
-        except Exception as e2:
-            print(f"Khong the mo cong: {e2}")
-            return
+        print(f"Khong the bind {lan_ip}:{LISTEN_PORT}: {e}")
+        return
 
     server.listen(256)
     print("=" * 60)
-    print(" [AGY LAN BRIDGE V2.0 DA SAN SANG]")
-    print(f" -> IP ket noi: http://{lan_ip}:{LISTEN_PORT}")
-    print(f" -> Rewrite Host: 127.0.0.1:{LOCAL_TARGET_PORT}")
-    print(f" -> Trang thai: HOAT DONG")
+    print(" [AGY LAN BRIDGE V3.0 DA SAN SANG]")
+    print(f" -> Dia chi LAN: http://{lan_ip}:{LISTEN_PORT}")
+    print(f" -> Chuyen tiep: http://{LOCAL_TARGET_HOST}:{LOCAL_TARGET_PORT}")
+    print(" -> Che do: Continuous Header Rewrite (Pass 100% Localhost Only)")
     print("=" * 60)
     sys.stdout.flush()
 
