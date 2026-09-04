@@ -3,6 +3,16 @@
 Tất cả các thay đổi, bổ sung và điều chỉnh cho bộ quy tắc toàn cục của Antigravity (AGY) được ghi chép chi tiết dưới đây theo chuẩn Semantic Versioning và Conventional Commits.
 
 ---
+## [v1.6.1] - 2026-09-04
+- **Commit**: `eb97135` (`eb97135eb70dbd473173e1ab8d2ec56ecf9ed121`)
+- **Loại thay đổi**: `docs`
+- **Tiêu đề**: `docs(rules): compact global rules to optimize token consumption v1.6.1`
+- **Chi tiết thay đổi**:
+  - Tinh giản và cô đọng văn bản của toàn bộ 9 điều luật, giảm độ dài từ 143 dòng xuống ~45 dòng (tiết kiệm hơn 80% dung lượng token).
+  - Giữ nguyên 100% nội dung, ý nghĩa và tính nghiêm ngặt của từng điều luật (từ Điều 1 đến Điều 9).
+  - Rút gọn bảng lịch sử phiên bản để tối ưu tải context.
+
+---
 ## [v1.6.0] - 2026-09-04
 - **Commit**: `06214ae` (`06214aeef5e3ed1b134ca61db97cbbfa29f6b235`)
 - **Loại thay đổi**: `feat`
@@ -96,3 +106,4 @@ Tất cả các thay đổi, bổ sung và điều chỉnh cho bộ quy tắc to
     3. **An toàn Mã nguồn**: Không tự ý xóa code cũ/thừa/comments, bắt buộc Unit Tests PASS 100%, bảo mật secrets.
     4. **Quy trình Git**: Chuẩn Conventional Commits, bảo vệ nhánh chính (cấm push trực tiếp lên `main`/`master`).
     5. **Quy trình Lập kế hoạch**: Bắt buộc tạo `implementation_plan.md` trước thay đổi lớn, chạy kiểm thử tự động sau mỗi lần sửa.
+
