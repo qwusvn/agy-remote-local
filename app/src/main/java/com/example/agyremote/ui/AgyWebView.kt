@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.agyremote.ui.webview.scripts.AgyActionScript
+import com.example.agyremote.ui.webview.scripts.AgyInputScript
 import com.example.agyremote.ui.webview.scripts.AgySessionScript
 import com.example.agyremote.ui.webview.scripts.AgyThemeScript
 
@@ -335,6 +336,7 @@ fun AgyWebView(
                     view?.evaluateJavascript(AgyThemeScript.getScript(), null)
                     view?.evaluateJavascript(AgyActionScript.getScript(), null)
                     view?.evaluateJavascript(AgySessionScript.getScript(), null)
+                    view?.evaluateJavascript(AgyInputScript.getScript(), null)
 
                     checkAndExtractAuthCode(currentUrl)
                 }

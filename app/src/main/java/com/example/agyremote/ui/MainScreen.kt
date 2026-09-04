@@ -418,6 +418,10 @@ fun MainScreen(
                 isFullscreen = isFullscreen,
                 onSelectTab = { tab ->
                     if (activeTabId != tab.id) {
+                        val currentUrl = webViewInstance?.url
+                        if (!currentUrl.isNullOrBlank() && currentUrl != "about:blank") {
+                            viewModel.saveCurrentTabUrl(currentUrl)
+                        }
                         viewModel.selectTab(tab)
                         webViewInstance?.loadUrl(tab.url)
                     }
@@ -429,11 +433,12 @@ fun MainScreen(
                     }
                 },
                 onAddTab = {
+                    val currentUrl = webViewInstance?.url
+                    if (!currentUrl.isNullOrBlank() && currentUrl != "about:blank") {
+                        viewModel.saveCurrentTabUrl(currentUrl)
+                    }
                     val newTab = viewModel.createNewTab(config.httpUrl)
                     webViewInstance?.loadUrl(newTab.url)
-                    webViewInstance?.postDelayed({
-                        navigateToProjects(webViewInstance)
-                    }, 350)
                 },
                 onToggleSidebar = { toggleAgySidebar(webViewInstance) },
                 onRestoreFullscreen = { isFullscreen = false }
@@ -463,7 +468,7 @@ fun MainScreen(
                         viewModel.addLog("NAV", "Hoàn tất tải: $currentUrl", false)
                     },
                     onTitleReceived = { title ->
-                        viewModel.updateSessionInfo("", title, config.httpUrl)
+                        viewModel.addLog("TITLE", "Trang: $title", false)
                     },
                     onWorkingStatusChanged = { isWorking ->
                         handleWorkingStatusChanged(isWorking)

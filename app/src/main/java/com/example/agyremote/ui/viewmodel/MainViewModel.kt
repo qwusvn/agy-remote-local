@@ -99,17 +99,38 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Cập nhật tiêu đề phiên thực tế (ngăn Tab ngố)
+     * Lưu URL hiện tại của tab đang hoạt động trước khi chuyển tab
      */
-    fun updateSessionInfo(path: String, title: String, baseUrl: String) {
+    fun saveCurrentTabUrl(url: String) {
+        if (url.isBlank() || url == "about:blank") return
+        val activeId = _activeTabId.value
+        _tabs.value = _tabs.value.map { tab ->
+            if (tab.id == activeId) tab.copy(url = url) else tab
+        }
+    }
+
+    /**
+     * Cập nhật tiêu đề phiên thực tế (bảo toàn tên phiên, ngăn Tab ngố)
+     */
+    fun updateSessionInfo(pathOrUrl: String, title: String, baseUrl: String) {
         if (title.isBlank() || title.startsWith("Antigravity", ignoreCase = true) || title == "about:blank") return
 
         val activeId = _activeTabId.value
-        val fullUrl = if (path.startsWith("http")) path else "${baseUrl.trimEnd('/')}$path"
+        val fullUrl = if (pathOrUrl.startsWith("http")) pathOrUrl else "${baseUrl.trimEnd('/')}$pathOrUrl"
 
         _tabs.value = _tabs.value.map { tab ->
             if (tab.id == activeId) {
-                tab.copy(title = title, url = fullUrl)
+                // Bảo toàn tên phiên: Không ghi đè tên cụ thể bằng generic "Phiên đang mở" khi đang ở trong chat
+                val isGeneric = title in listOf("Phiên đang mở", "Dự án / Phiên", "Lịch sử")
+                val hasSpecific = tab.title !in listOf("Phiên đang mở", "Dự án / Phiên", "Lịch sử", "")
+
+                val finalTitle = if (isGeneric && hasSpecific && fullUrl.contains("/c/")) {
+                    tab.title
+                } else {
+                    title
+                }
+
+                tab.copy(title = finalTitle, url = fullUrl)
             } else {
                 tab
             }

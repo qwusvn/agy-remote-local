@@ -74,6 +74,7 @@ object AgySessionScript {
                 trackActiveConvo();
 
                 // 3. Trích xuất tiêu đề phiên thực tế cho Android Tab
+                let lastReportedTitle = '';
                 function reportCurrentSession() {
                     try {
                         const p = window.location.pathname;
@@ -81,26 +82,48 @@ object AgySessionScript {
                         if (p === '/' || p === '') {
                             title = 'Dự án / Phiên';
                         } else if (p.startsWith('/c/')) {
-                            const header = document.querySelector('header, [class*="header"], [role="banner"]');
-                            if (header) {
-                                const candidates = Array.from(header.querySelectorAll('h1, h2, h3, div, span'))
-                                    .filter(el => el.children.length === 0 && !el.closest('button') && el.innerText && el.innerText.trim().length > 1);
-                                if (candidates.length > 0) {
-                                    title = candidates[0].innerText.trim();
+                            // Ưu tiên 1: Lấy từ sidebar item của chính phiên này
+                            const sidebarLink = document.querySelector('a[href="' + p + '"], a[href^="' + p + '"]');
+                            if (sidebarLink && sidebarLink.innerText) {
+                                const text = sidebarLink.innerText.trim().split('\n')[0];
+                                if (text && text.length > 1 && !text.startsWith('Antigravity')) {
+                                    title = text;
                                 }
                             }
+
+                            // Ưu tiên 2: Lấy từ active conversation item
                             if (!title) {
                                 const activeItem = document.querySelector('[class*="conversationItem"][class*="active"], [aria-selected="true"] [class*="title"], [data-active="true"]');
                                 if (activeItem && activeItem.innerText) {
-                                    title = activeItem.innerText.trim().split('\n')[0];
+                                    const text = activeItem.innerText.trim().split('\n')[0];
+                                    if (text && text.length > 1 && !text.startsWith('Antigravity')) {
+                                        title = text;
+                                    }
                                 }
                             }
+
+                            // Ưu tiên 3: Lấy từ header title
                             if (!title) {
-                                const heading = document.querySelector('h1, [role="heading"]');
-                                if (heading && heading.innerText && heading.innerText.trim().length > 1) {
-                                    title = heading.innerText.trim();
+                                const header = document.querySelector('header, [class*="header"], [role="banner"]');
+                                if (header) {
+                                    const candidates = Array.from(header.querySelectorAll('h1, h2, h3, div, span'))
+                                        .filter(el => el.children.length === 0 && !el.closest('button') && el.innerText && el.innerText.trim().length > 1);
+                                    if (candidates.length > 0) {
+                                        const text = candidates[0].innerText.trim();
+                                        if (text && !text.startsWith('Antigravity')) title = text;
+                                    }
                                 }
                             }
+
+                            // Ưu tiên 4: Lấy từ câu hỏi đầu tiên của người dùng
+                            if (!title) {
+                                const userMsg = document.querySelector('[data-role="user"], .user-message, div[class*="user_message"]');
+                                if (userMsg && userMsg.innerText) {
+                                    const snippet = userMsg.innerText.trim().split('\n')[0].substring(0, 30);
+                                    if (snippet) title = snippet + '...';
+                                }
+                            }
+
                             if (!title) {
                                 title = 'Phiên đang mở';
                             }
@@ -108,8 +131,11 @@ object AgySessionScript {
                             title = 'Lịch sử';
                         }
 
-                        if (title && window.AgyAndroidBridge && window.AgyAndroidBridge.reportSessionInfo) {
-                            window.AgyAndroidBridge.reportSessionInfo(p, title);
+                        if (title && title !== lastReportedTitle) {
+                            lastReportedTitle = title;
+                            if (window.AgyAndroidBridge && window.AgyAndroidBridge.reportSessionInfo) {
+                                window.AgyAndroidBridge.reportSessionInfo(window.location.href, title);
+                            }
                         }
                     } catch(e) {}
                 }
