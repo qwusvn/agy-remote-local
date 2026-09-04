@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.agyremote.data.cache.AgyResourceCache
 import com.example.agyremote.ui.webview.scripts.AgyActionScript
 import com.example.agyremote.ui.webview.scripts.AgyInputScript
 import com.example.agyremote.ui.webview.scripts.AgySessionScript
@@ -147,6 +148,60 @@ fun navigateToHistory(webView: WebView?) {
     handleSwipeLeft(webView)
 }
 
+/**
+ * Điều hướng URL thông minh: Sử dụng SPA Navigation nếu cùng host, hoặc loadUrl nếu là trang ngoài
+ */
+fun navigateToAgyUrl(webView: WebView?, targetUrl: String, baseUrl: String) {
+    if (webView == null || targetUrl.isBlank() || targetUrl == "about:blank") return
+
+    val isInternal = try {
+        val targetUri = Uri.parse(targetUrl)
+        val baseUri = Uri.parse(baseUrl)
+        (targetUri.host == null || targetUri.host.equals(baseUri.host, ignoreCase = true)) &&
+        (targetUri.port == -1 || baseUri.port == -1 || targetUri.port == baseUri.port)
+    } catch (e: Exception) {
+        false
+    }
+
+    if (isInternal) {
+        val path = try {
+            val uri = Uri.parse(targetUrl)
+            val p = uri.path ?: "/"
+            val q = if (uri.query != null) "?${uri.query}" else ""
+            val f = if (uri.fragment != null) "#${uri.fragment}" else ""
+            "$p$q$f"
+        } catch (e: Exception) {
+            targetUrl
+        }
+
+        val escapedPath = path.replace("'", "\\'")
+        val js = """
+            (function() {
+                if (typeof window.agySpaNavigate === 'function') {
+                    window.agySpaNavigate('$escapedPath');
+                } else {
+                    const r = window.__TSR_ROUTER__;
+                    if (r && typeof r.navigate === 'function') {
+                        if ('$escapedPath'.startsWith('/c/')) {
+                            const cid = '$escapedPath'.replace('/c/', '').split('?')[0].split('#')[0];
+                            r.navigate({ to: '/c/${'$'}cascadeId', params: { cascadeId: cid } });
+                        } else if ('$escapedPath' === '/' || '$escapedPath' === '') {
+                            r.navigate({ to: '/' });
+                        } else {
+                            r.navigate({ to: '$escapedPath' });
+                        }
+                    } else {
+                        window.location.href = '$targetUrl';
+                    }
+                }
+            })();
+        """.trimIndent()
+        webView.post { webView.evaluateJavascript(js, null) }
+    } else {
+        webView.post { webView.loadUrl(targetUrl) }
+    }
+}
+
 class AgyJsBridge(
     private val onStatus: (Boolean) -> Unit,
     private val onSwipeLeft: () -> Unit,
@@ -184,6 +239,7 @@ class AgyJsBridge(
 @Composable
 fun AgyWebView(
     url: String,
+    isVisible: Boolean = true,
     modifier: Modifier = Modifier,
     isDarkTheme: Boolean = true,
     onPageStarted: (String) -> Unit = {},
@@ -201,6 +257,7 @@ fun AgyWebView(
     onWebViewCreated: (WebView) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val resourceCache = remember { AgyResourceCache(context) }
     val webView = remember {
         WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -341,6 +398,17 @@ fun AgyWebView(
                     checkAndExtractAuthCode(currentUrl)
                 }
 
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val cachedResponse = resourceCache.shouldInterceptRequest(request)
+                    if (cachedResponse != null) {
+                        return cachedResponse
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -475,18 +543,29 @@ fun AgyWebView(
         }
     }
 
-    BackHandler(enabled = webView.canGoBack()) {
-        webView.goBack()
-    }
-
-    DisposableEffect(url) {
-        onWebViewCreated(webView)
+    // Nạp URL duy nhất 1 lần khi khởi tạo WebView và giải phóng RAM khi destroy
+    DisposableEffect(Unit) {
         webView.loadUrl(url)
-        onDispose { }
+        onDispose {
+            try {
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                webView.destroy()
+            } catch (e: Exception) {
+                Log.w("AgyWebView", "Lỗi destroy WebView: ${e.message}")
+            }
+        }
     }
 
     AndroidView(
-        factory = { webView },
-        modifier = modifier
+        factory = {
+            webView.apply {
+                visibility = android.view.View.VISIBLE
+            }
+        },
+        modifier = modifier,
+        update = { v ->
+            onWebViewCreated(v)
+        }
     )
 }

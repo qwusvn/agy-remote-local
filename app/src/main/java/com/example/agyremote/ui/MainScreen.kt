@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.agyremote.data.ConnectionConfig
 import com.example.agyremote.data.ConnectionPreferences
@@ -365,21 +367,26 @@ fun MainScreen(
         }
     }
 
+    val currentTab = tabs.find { it.id == activeTabId }
+
     // Xử lý nút Back của Android
     BackHandler(enabled = true) {
-        if (webViewInstance?.canGoBack() == true) {
-            webViewInstance?.goBack()
+        val currentUrl = currentTab?.url ?: ""
+        if (currentUrl.contains("/c/")) {
+            // Đang ở trong phiên chat -> lùi về màn hình dự án / danh sách phiên
+            navigateToProjects(webViewInstance)
         } else if (tabs.size > 1) {
+            // Đang ở màn hình dự án mà có nhiều tab -> đóng tab hiện tại
             val nextTab = viewModel.closeTab(activeTabId)
             if (nextTab != null) {
-                webViewInstance?.loadUrl(nextTab.url)
+                navigateToAgyUrl(webViewInstance, nextTab.url, config.httpUrl)
             }
+        } else if (webViewInstance?.canGoBack() == true) {
+            webViewInstance?.goBack()
         } else {
             activity?.moveTaskToBack(true)
         }
     }
-
-    val currentTab = tabs.find { it.id == activeTabId }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -418,33 +425,25 @@ fun MainScreen(
                 isFullscreen = isFullscreen,
                 onSelectTab = { tab ->
                     if (activeTabId != tab.id) {
-                        val currentUrl = webViewInstance?.url
-                        if (!currentUrl.isNullOrBlank() && currentUrl != "about:blank") {
-                            viewModel.saveCurrentTabUrl(currentUrl)
-                        }
                         viewModel.selectTab(tab)
-                        webViewInstance?.loadUrl(tab.url)
+                        navigateToAgyUrl(webViewInstance, tab.url, config.httpUrl)
                     }
                 },
                 onCloseTab = { tabId ->
                     val nextTab = viewModel.closeTab(tabId)
                     if (nextTab != null) {
-                        webViewInstance?.loadUrl(nextTab.url)
+                        navigateToAgyUrl(webViewInstance, nextTab.url, config.httpUrl)
                     }
                 },
                 onAddTab = {
-                    val currentUrl = webViewInstance?.url
-                    if (!currentUrl.isNullOrBlank() && currentUrl != "about:blank") {
-                        viewModel.saveCurrentTabUrl(currentUrl)
-                    }
                     val newTab = viewModel.createNewTab(config.httpUrl)
-                    webViewInstance?.loadUrl(newTab.url)
+                    navigateToAgyUrl(webViewInstance, newTab.url, config.httpUrl)
                 },
                 onToggleSidebar = { toggleAgySidebar(webViewInstance) },
                 onRestoreFullscreen = { isFullscreen = false }
             )
 
-            // 3. VÙNG HIỂN THỊ NỘI DUNG WEBVIEW VÀ GESTURES
+            // 3. VÙNG HIỂN THỊ NỘI DUNG WEBVIEW DUY NHẤT (ĐIỀU HƯỚNG SPA SIÊU TỐC 0MS - KHÔNG RELOAD - DISK CACHE)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -455,7 +454,8 @@ fun MainScreen(
                     }
             ) {
                 AgyWebView(
-                    url = currentTab?.url ?: config.httpUrl,
+                    url = config.httpUrl,
+                    isVisible = true,
                     modifier = Modifier.fillMaxSize(),
                     isDarkTheme = isDarkTheme,
                     onPageStarted = {
@@ -471,6 +471,7 @@ fun MainScreen(
                         viewModel.addLog("TITLE", "Trang: $title", false)
                     },
                     onWorkingStatusChanged = { isWorking ->
+                        viewModel.updateActiveTabWorking(isWorking)
                         handleWorkingStatusChanged(isWorking)
                     },
                     onNavigationChanged = { screen ->
@@ -494,7 +495,7 @@ fun MainScreen(
                         )
                     },
                     onSessionInfoReceived = { path, title ->
-                        viewModel.updateSessionInfo(path, title, config.httpUrl)
+                        viewModel.updateActiveTabSessionInfo(path, title, config.httpUrl)
                     },
                     onWebViewCreated = { webView ->
                         webViewInstance = webView

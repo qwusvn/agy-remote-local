@@ -110,16 +110,26 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Cập nhật tiêu đề phiên thực tế (bảo toàn tên phiên, ngăn Tab ngố)
+     * Cập nhật tiêu đề phiên thực tế cho tab đang hoạt động (bảo toàn tên phiên, ngăn Tab ngố)
      */
+    fun updateActiveTabSessionInfo(pathOrUrl: String, title: String, baseUrl: String) {
+        updateSessionInfoForTab(_activeTabId.value, pathOrUrl, title, baseUrl)
+    }
+
     fun updateSessionInfo(pathOrUrl: String, title: String, baseUrl: String) {
+        updateActiveTabSessionInfo(pathOrUrl, title, baseUrl)
+    }
+
+    /**
+     * Cập nhật tiêu đề phiên theo tabId cụ thể
+     */
+    fun updateSessionInfoForTab(tabId: String, pathOrUrl: String, title: String, baseUrl: String) {
         if (title.isBlank() || title.startsWith("Antigravity", ignoreCase = true) || title == "about:blank") return
 
-        val activeId = _activeTabId.value
         val fullUrl = if (pathOrUrl.startsWith("http")) pathOrUrl else "${baseUrl.trimEnd('/')}$pathOrUrl"
 
         _tabs.value = _tabs.value.map { tab ->
-            if (tab.id == activeId) {
+            if (tab.id == tabId) {
                 // Bảo toàn tên phiên: Không ghi đè tên cụ thể bằng generic "Phiên đang mở" khi đang ở trong chat
                 val isGeneric = title in listOf("Phiên đang mở", "Dự án / Phiên", "Lịch sử")
                 val hasSpecific = tab.title !in listOf("Phiên đang mở", "Dự án / Phiên", "Lịch sử", "")
@@ -141,9 +151,15 @@ class MainViewModel : ViewModel() {
      * Cập nhật trạng thái làm việc (isWorking) cho tab đang active
      */
     fun updateActiveTabWorking(isWorking: Boolean) {
-        val activeId = _activeTabId.value
+        updateTabWorking(_activeTabId.value, isWorking)
+    }
+
+    /**
+     * Cập nhật trạng thái làm việc (isWorking) theo tabId cụ thể
+     */
+    fun updateTabWorking(tabId: String, isWorking: Boolean) {
         _tabs.value = _tabs.value.map { tab ->
-            if (tab.id == activeId) tab.copy(isWorking = isWorking) else tab
+            if (tab.id == tabId) tab.copy(isWorking = isWorking) else tab
         }
     }
 

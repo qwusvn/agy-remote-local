@@ -82,16 +82,34 @@ object AgySessionScript {
                         if (p === '/' || p === '') {
                             title = 'Dự án / Phiên';
                         } else if (p.startsWith('/c/')) {
-                            // Ưu tiên 1: Lấy từ sidebar item của chính phiên này
-                            const sidebarLink = document.querySelector('a[href="' + p + '"], a[href^="' + p + '"]');
-                            if (sidebarLink && sidebarLink.innerText) {
-                                const text = sidebarLink.innerText.trim().split('\n')[0];
-                                if (text && text.length > 1 && !text.startsWith('Antigravity')) {
-                                    title = text;
+                            // Ưu tiên 0: Lấy từ document.title
+                            if (document.title && document.title.trim() && !document.title.trim().startsWith('Antigravity') && document.title.trim() !== 'about:blank') {
+                                title = document.title.trim();
+                            }
+
+                            // Ưu tiên 1: Header title span hiển thị bên cạnh nút quay lại
+                            if (!title) {
+                                const headerSpan = document.querySelector('header span.truncate, span.truncate.inline-block, [class*="truncate"][class*="inline-block"]');
+                                if (headerSpan && headerSpan.innerText) {
+                                    const text = headerSpan.innerText.trim().split('\n')[0];
+                                    if (text && text.length > 1 && !text.startsWith('Antigravity')) {
+                                        title = text;
+                                    }
                                 }
                             }
 
-                            // Ưu tiên 2: Lấy từ active conversation item
+                            // Ưu tiên 2: Lấy từ sidebar item của chính phiên này
+                            if (!title) {
+                                const sidebarLink = document.querySelector('a[href="' + p + '"], a[href^="' + p + '"]');
+                                if (sidebarLink && sidebarLink.innerText) {
+                                    const text = sidebarLink.innerText.trim().split('\n')[0];
+                                    if (text && text.length > 1 && !text.startsWith('Antigravity')) {
+                                        title = text;
+                                    }
+                                }
+                            }
+
+                            // Ưu tiên 3: Lấy từ active conversation item
                             if (!title) {
                                 const activeItem = document.querySelector('[class*="conversationItem"][class*="active"], [aria-selected="true"] [class*="title"], [data-active="true"]');
                                 if (activeItem && activeItem.innerText) {
@@ -102,7 +120,7 @@ object AgySessionScript {
                                 }
                             }
 
-                            // Ưu tiên 3: Lấy từ header title
+                            // Ưu tiên 4: Lấy từ header title
                             if (!title) {
                                 const header = document.querySelector('header, [class*="header"], [role="banner"]');
                                 if (header) {
@@ -115,7 +133,7 @@ object AgySessionScript {
                                 }
                             }
 
-                            // Ưu tiên 4: Lấy từ câu hỏi đầu tiên của người dùng
+                            // Ưu tiên 5: Lấy từ câu hỏi đầu tiên của người dùng
                             if (!title) {
                                 const userMsg = document.querySelector('[data-role="user"], .user-message, div[class*="user_message"]');
                                 if (userMsg && userMsg.innerText) {
@@ -131,17 +149,26 @@ object AgySessionScript {
                             title = 'Lịch sử';
                         }
 
-                        if (title && title !== lastReportedTitle) {
+                        const currentHref = window.location.href;
+                        if (title && (title !== lastReportedTitle || currentHref !== lastReportedHref)) {
                             lastReportedTitle = title;
+                            lastReportedHref = currentHref;
                             if (window.AgyAndroidBridge && window.AgyAndroidBridge.reportSessionInfo) {
-                                window.AgyAndroidBridge.reportSessionInfo(window.location.href, title);
+                                window.AgyAndroidBridge.reportSessionInfo(currentHref, title);
                             }
                         }
                     } catch(e) {}
                 }
 
+                // Cung cấp hàm ép buộc cập nhật thông tin phiên ngay lập tức
+                window.agyForceReportSession = function() {
+                    lastReportedTitle = '';
+                    lastReportedHref = '';
+                    reportCurrentSession();
+                };
+
                 if (!window.__agySessionTitleInterval) {
-                    window.__agySessionTitleInterval = setInterval(reportCurrentSession, 350);
+                    window.__agySessionTitleInterval = setInterval(reportCurrentSession, 300);
                 }
                 reportCurrentSession();
 
@@ -152,6 +179,75 @@ object AgySessionScript {
                     });
                     window.__agyRealtimeDomWatcher.observe(document.body, { childList: true, subtree: true });
                 }
+
+                // 5. Hàm điều hướng SPA tức thì (0ms không reload trang)
+                window.agySpaNavigate = function(targetPathOrUrl) {
+                    try {
+                        let targetPath = targetPathOrUrl;
+                        try {
+                            if (targetPathOrUrl.startsWith('http://') || targetPathOrUrl.startsWith('https://')) {
+                                const u = new URL(targetPathOrUrl);
+                                targetPath = u.pathname + u.search + u.hash;
+                            }
+                        } catch(e) {}
+
+                        if (!targetPath) targetPath = '/';
+
+                        const currentPath = window.location.pathname + window.location.search + window.location.hash;
+                        if (currentPath === targetPath) {
+                            return true;
+                        }
+
+                        // Đóng auxiliary pane nếu đang mở
+                        try {
+                            const auxBtn = document.querySelector('[data-testid="mobile-toggle-aux-sidebar"]') || 
+                                           document.querySelector('button[aria-label="Toggle Auxiliary Pane"]');
+                            const hasAux = document.querySelector('[data-testid="changed-file-row"]') || 
+                                           document.querySelector('[data-testid="aux-panel-plus-dropdown-trigger"]');
+                            if (hasAux && auxBtn) auxBtn.click();
+                        } catch(e) {}
+
+                        const r = window.__TSR_ROUTER__;
+                        if (r && typeof r.navigate === 'function') {
+                            if (targetPath.startsWith('/c/')) {
+                                const cid = targetPath.replace('/c/', '').split('?')[0].split('#')[0];
+                                r.navigate({ to: '/c/${'$'}cascadeId', params: { cascadeId: cid } });
+                                setTimeout(reportCurrentSession, 80);
+                                return true;
+                            } else if (targetPath === '/' || targetPath === '') {
+                                r.navigate({ to: '/' });
+                                setTimeout(reportCurrentSession, 80);
+                                return true;
+                            } else if (targetPath.startsWith('/history')) {
+                                r.navigate({ to: '/history' });
+                                setTimeout(reportCurrentSession, 80);
+                                return true;
+                            } else {
+                                r.navigate({ to: targetPath });
+                                setTimeout(reportCurrentSession, 80);
+                                return true;
+                            }
+                        }
+
+                        // Fallback: Tìm link a trong DOM
+                        const domLink = document.querySelector('a[href="' + targetPath + '"]');
+                        if (domLink) {
+                            domLink.click();
+                            setTimeout(reportCurrentSession, 80);
+                            return true;
+                        }
+
+                        // Fallback: History API popstate
+                        window.history.pushState(null, '', targetPath);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        setTimeout(reportCurrentSession, 80);
+                        return true;
+                    } catch(err) {
+                        console.error('[AGY] SPA Navigation error:', err);
+                        window.location.href = targetPathOrUrl;
+                        return false;
+                    }
+                };
             } catch(err) {
                 console.error('[AGY] SessionScript Error:', err);
             }
