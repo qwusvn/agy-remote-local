@@ -128,17 +128,38 @@ class AgyNotificationService : Service() {
             }
         }
 
+        @Volatile
+        var isAppInForeground: Boolean = false
+
+        fun clearAlertNotification(context: Context) {
+            try {
+                val manager = NotificationManagerCompat.from(context)
+                manager.cancel(NOTIFICATION_ALERT_ID)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         private var lastNotifiedTime: Long = 0L
         private var lastNotifiedMessage: String = ""
 
         fun showPushNotification(context: Context, title: String, message: String, targetUrl: String? = null) {
+            // Nếu người dùng đang mở app và nhìn trực tiếp màn hình thì không bắn thông báo làm phiền
+            if (isAppInForeground) {
+                return
+            }
+
             val now = System.currentTimeMillis()
             // Lọc triệt để theo yêu cầu: Chỉ hiện thông báo kết luận cuối cùng, bỏ qua toàn bộ log lệnh/tool/Created At
             if (message.isBlank() || 
                 message.contains("Created At:") || 
                 message.contains("Completed At:") || 
                 message.contains("The command exited") ||
-                message.contains("task-")
+                message.contains("task-") ||
+                message.contains("<USER_REQUEST>") ||
+                message.startsWith("Step ") ||
+                message.startsWith("Ran ") ||
+                message.startsWith("Edited ")
             ) {
                 return
             }
@@ -158,7 +179,7 @@ class AgyNotificationService : Service() {
                     .setContentText(message)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setSound(soundUri)
@@ -168,6 +189,7 @@ class AgyNotificationService : Service() {
                     .build()
 
                 val manager = NotificationManagerCompat.from(context)
+                // Luôn dùng 1 ID duy nhất để ghi đè thông báo cũ, không bao giờ gom nhóm hoặc tích tụ rác
                 manager.notify(NOTIFICATION_ALERT_ID, notification)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -175,6 +197,11 @@ class AgyNotificationService : Service() {
         }
 
         fun showSessionNotification(context: Context, convoId: String, title: String, message: String, targetUrl: String?) {
+            // Nếu người dùng đang mở app thì không bắn thông báo nổi để tránh rác màn hình
+            if (isAppInForeground) {
+                return
+            }
+
             val now = System.currentTimeMillis()
             // Lọc triệt để: Chỉ hiện thông báo kết luận cuối cùng, bỏ qua toàn bộ log lệnh/tool/Created At
             if (message.isBlank() || 
@@ -182,6 +209,7 @@ class AgyNotificationService : Service() {
                 message.contains("Completed At:") || 
                 message.contains("The command exited") || 
                 message.contains("task-") ||
+                message.contains("<USER_REQUEST>") ||
                 message.startsWith("Step ") ||
                 message.startsWith("Ran ") ||
                 message.startsWith("Edited ")
@@ -205,7 +233,7 @@ class AgyNotificationService : Service() {
                     .setContentText(message)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setSound(soundUri)
@@ -215,8 +243,8 @@ class AgyNotificationService : Service() {
                     .build()
 
                 val manager = NotificationManagerCompat.from(context)
-                val id = if (convoId.isNotBlank()) (convoId.hashCode() and 0x7FFFFFFF) % 10000 + 3000 else NOTIFICATION_ALERT_ID
-                manager.notify(id, notification)
+                // Dùng chung NOTIFICATION_ALERT_ID để ghi đè thay thế, không spam nhiều thông báo riêng lẻ
+                manager.notify(NOTIFICATION_ALERT_ID, notification)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

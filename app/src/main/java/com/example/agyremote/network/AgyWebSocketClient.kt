@@ -136,7 +136,15 @@ class AgyWebSocketClient(
                     if (cleanTitle.length > 50) {
                         cleanTitle = cleanTitle.take(47) + "..."
                     }
-                    val summary = json?.optString("summary") ?: "Agent đã hoàn tất câu trả lời"
+                    val rawSummary = json?.optString("summary") ?: "Agent đã hoàn tất câu trả lời"
+                    var summary = rawSummary
+                        .replace("<USER_REQUEST>", "")
+                        .replace("</USER_REQUEST>", "")
+                        .replace(Regex("<[^>]*>"), "")
+                        .trim()
+                    if (summary.isBlank() || summary.contains("Created At:") || summary.contains("The command exited")) {
+                        summary = "Agent đã hoàn tất câu trả lời"
+                    }
                     val rawUrl = json?.optString("url") ?: ""
                     val url = if (rawUrl.contains("localhost") || rawUrl.contains("127.0.0.1")) {
                         rawUrl.replace("localhost", hostIp).replace("127.0.0.1", hostIp)

@@ -58,4 +58,15 @@ class MainActivity : ComponentActivity() {
       }
     }
   }
+
+  override fun onResume() {
+    super.onResume()
+    com.example.agyremote.service.AgyNotificationService.isAppInForeground = true
+    com.example.agyremote.service.AgyNotificationService.clearAlertNotification(this)
+  }
+
+  override fun onPause() {
+    super.onPause()
+    com.example.agyremote.service.AgyNotificationService.isAppInForeground = false
+  }
 }

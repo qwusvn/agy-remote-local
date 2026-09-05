@@ -18,9 +18,11 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
     - Bổ sung nút gửi nhanh trên thanh trạng thái gốc `TopStatusBar` (giao diện Compose) để luôn gửi được dù bàn phím ảo che khuất.
   - **Sửa lỗi nạp WebView / Trắng trang**:
     - Loại trừ các file bundle lớn (`/main.js` 9MB, `/prism_bundle.js`) khỏi bộ đệm nhị phân đồng bộ của OkHttp trong `AgyResourceCache`, giải quyết triệt để lỗi timeout và file cache rỗng.
-  - **Lọc triệt để thông báo rác**:
-    - Cập nhật `bridge/session_watcher.js` và `AgyNotificationService.kt` loại bỏ toàn bộ log lệnh trung gian (`Created At:`, `Completed At:`, `The command exited`, `task-`, `Step `, `Ran `).
-    - Chỉ gửi thông báo nổi (Heads-up Notification) khi Agent hoàn tất câu trả lời kết luận cuối cùng.
+  - **Khắc phục triệt để 100% thông báo rác**:
+    - Nâng cấp `bridge/session_watcher.js` v7.0: Khởi tạo chỉ mục toàn bộ các bước cũ trên hệ thống, chỉ quét các file hoạt động trong 2 phút gần nhất, không bao giờ phát lại thông báo từ lịch sử cũ.
+    - Lọc bỏ hoàn toàn các thẻ `<USER_REQUEST>`, lệnh tool execution (`tool_calls`, `type: GENERIC`), chỉ thông báo khi Agent đưa ra kết luận hoàn tất thực sự (`PLANNER_RESPONSE` có nội dung sạch).
+    - Tự động tắt âm thanh/rung và thông báo nổi khi người dùng đang mở ứng dụng ở tiền cảnh (`isAppInForeground = true`), tránh làm phiền khi đang nhìn màn hình.
+    - Duy nhất 1 ID thông báo (`NOTIFICATION_ALERT_ID`), tự động ghi đè thông báo cũ và tự động xóa sạch khi mở app.
 
 ---
 
