@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -252,6 +254,44 @@ fun MainScreen(
         webViewInstance?.evaluateJavascript(AgyActionScript.getForceExpandScript()) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             Toast.makeText(context, "⚡ Đã mở rộng toàn bộ thẻ Action", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Launcher chọn ảnh trực tiếp từ Thư viện / Thiết bị Android
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
+
+        scope.launch(Dispatchers.IO) {
+            var successCount = 0
+            uris.forEachIndexed { index, uri ->
+                try {
+                    val optimizedUri = ImageOptimizer.optimizeImage(context, uri) ?: uri
+                    val result = ImageOptimizer.getBase64Image(context, optimizedUri)
+                        ?: ImageOptimizer.getBase64Image(context, uri)
+
+                    if (result != null) {
+                        val (base64, mimeType) = result
+                        val fileName = "img_${System.currentTimeMillis()}_$index.jpg"
+                        withContext(Dispatchers.Main) {
+                            injectImageIntoWebView(webViewInstance, base64, mimeType, fileName)
+                            successCount++
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        viewModel.addLog("IMG_ERR", "Lỗi nạp ảnh: ${e.message}", true)
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                if (successCount > 0) {
+                    Toast.makeText(context, "⚡ Đã đính kèm $successCount ảnh!", Toast.LENGTH_SHORT).show()
+                    viewModel.addLog("UPLOAD", "Đã đính kèm $successCount ảnh vào phiên chat", false)
+                }
+            }
         }
     }
 
@@ -479,6 +519,8 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .navigationBarsPadding()
+                .imePadding()
         ) {
             // 1. THANH STATUSBAR 1 (TOP STATUS BAR)
             TopStatusBar(
@@ -488,6 +530,7 @@ fun MainScreen(
                 isCollapsed = isFullscreen,
                 errorCount = errorCount,
                 clipboardImageUri = clipboardImageUri,
+                onOpenImagePicker = { imagePickerLauncher.launch("image/*") },
                 onPasteClipboardImage = { pasteClipboardImage() },
                 onShowLogs = { showLogsSheet = true },
                 onRefresh = {
@@ -593,6 +636,9 @@ fun MainScreen(
                     },
                     onSessionInfoReceived = { path, title ->
                         viewModel.updateActiveTabSessionInfo(path, title, config.httpUrl)
+                    },
+                    onOpenImagePicker = {
+                        imagePickerLauncher.launch("image/*")
                     },
                     onWebViewCreated = { webView ->
                         webViewInstance = webView

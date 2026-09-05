@@ -233,7 +233,8 @@ class AgyJsBridge(
     private val onSwipeRight: () -> Unit,
     private val onNavigate: (String) -> Unit,
     private val onSessionInfo: (String, String) -> Unit = { _, _ -> },
-    private val onTaskDone: (String) -> Unit = {}
+    private val onTaskDone: (String) -> Unit = {},
+    private val onOpenImagePicker: () -> Unit = {}
 ) {
     @android.webkit.JavascriptInterface
     fun reportWorkingStatus(isWorking: Boolean) {
@@ -264,6 +265,11 @@ class AgyJsBridge(
     fun reportNavigation(screen: String) {
         onNavigate(screen)
     }
+
+    @android.webkit.JavascriptInterface
+    fun openImagePicker() {
+        onOpenImagePicker()
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -286,6 +292,7 @@ fun AgyWebView(
     onAuthCodeCaptured: (String) -> Unit = {},
     onRequestFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams?) -> Unit = { _, _ -> },
     onSessionInfoReceived: (path: String, title: String) -> Unit = { _, _ -> },
+    onOpenImagePicker: () -> Unit = {},
     onWebViewCreated: (WebView) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -336,6 +343,11 @@ fun AgyWebView(
                     onSessionInfo = { path, title ->
                         post {
                             onSessionInfoReceived(path, title)
+                        }
+                    },
+                    onOpenImagePicker = {
+                        post {
+                            onOpenImagePicker()
                         }
                     }
                 ),

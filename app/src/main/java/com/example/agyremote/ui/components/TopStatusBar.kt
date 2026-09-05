@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.ContentPaste
+
 /**
  * Thanh trạng thái phía trên (Statusbar 1).
  * Quản lý thông tin kết nối và thanh công cụ thao tác nhanh.
@@ -52,6 +55,7 @@ fun TopStatusBar(
     isCollapsed: Boolean,
     errorCount: Int,
     clipboardImageUri: Uri?,
+    onOpenImagePicker: () -> Unit,
     onPasteClipboardImage: () -> Unit,
     onShowLogs: () -> Unit,
     onRefresh: () -> Unit,
@@ -117,6 +121,22 @@ fun TopStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // Nút Chọn ảnh từ thiết bị
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable { onOpenImagePicker() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.AddPhotoAlternate,
+                        contentDescription = "Chọn ảnh từ máy",
+                        modifier = Modifier.size(15.dp),
+                        tint = Color(0xFF38BDF8)
+                    )
+                }
+
                 // Nút Dán ảnh từ Clipboard
                 Box(
                     modifier = Modifier
@@ -136,10 +156,10 @@ fun TopStatusBar(
                         }
                     ) {
                         Icon(
-                            Icons.Default.Image,
-                            contentDescription = "Gửi ảnh Clipboard",
+                            Icons.Default.ContentPaste,
+                            contentDescription = "Dán ảnh từ Clipboard",
                             modifier = Modifier.size(14.dp),
-                            tint = if (clipboardImageUri != null) Color(0xFF22C55E) else textColor.copy(alpha = 0.6f)
+                            tint = if (clipboardImageUri != null) Color(0xFF22C55E) else textColor.copy(alpha = 0.5f)
                         )
                     }
                 }

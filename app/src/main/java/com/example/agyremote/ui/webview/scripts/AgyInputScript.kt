@@ -186,23 +186,60 @@ object AgyInputScript {
                         }
                     }, true);
 
-                    // 2. Bắt sự kiện 'keydown' (bàn phím cứng / phím Enter / keyevent 66 ADB)
+                    // 2. Bắt sự kiện 'keydown' (bàn phím ảo Android / phím Enter / keyevent 66 ADB)
                     doc.addEventListener('keydown', function(e) {
+                        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+
                         if (Date.now() - lastHandledTimestamp < 300) {
-                            if (e.key === 'Enter' || e.keyCode === 13) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            }
+                            e.preventDefault();
+                            e.stopPropagation();
                             return;
                         }
 
-                        if (e.key !== 'Enter' && e.keyCode !== 13) return;
-
+                        // A. Ưu tiên logic định dạng danh sách thông minh (- , * , 1. )
                         const handled = processSmartInputFormatting(e.target);
                         if (handled) {
                             e.preventDefault();
                             e.stopPropagation();
                             lastHandledTimestamp = Date.now();
+                            return;
+                        }
+
+                        // B. Nếu người dùng không giữ phím Shift (Shift+Enter để xuống dòng):
+                        // Gửi tin nhắn ngay lập tức nếu nút Send đang được kích hoạt (đã có chữ hoặc ảnh)
+                        if (!e.shiftKey) {
+                            const sendBtn = document.querySelector('button[data-testid="send-button"], button[data-tooltip-id="input-send-button-send-tooltip"]');
+                            if (sendBtn && !sendBtn.disabled) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                lastHandledTimestamp = Date.now();
+                                sendBtn.click();
+                                console.log('[AGY] Tin nhắn đã được gửi qua phím Enter.');
+                                return;
+                            }
+                        }
+                    }, true);
+
+                    // 3. Bắt sự kiện chạm / click vào mục "Media" trong menu Add Context (+)
+                    // Tránh lỗi Chromium: "File chooser dialog can only be shown with a user activation"
+                    doc.addEventListener('click', function(e) {
+                        const target = e.target;
+                        if (!target) return;
+                        const mediaItem = target.closest('button, [role="menuitem"], div');
+                        if (mediaItem) {
+                            const txt = (mediaItem.innerText || '').trim();
+                            if (txt === 'Media' || txt === 'Hình ảnh' || txt === 'Tệp' || txt === 'Upload') {
+                                if (window.AgyAndroidBridge && window.AgyAndroidBridge.openImagePicker) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    window.AgyAndroidBridge.openImagePicker();
+                                    // Đóng menu Add context
+                                    try {
+                                        const esc = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true });
+                                        doc.dispatchEvent(esc);
+                                    } catch(err) {}
+                                }
+                            }
                         }
                     }, true);
                 }

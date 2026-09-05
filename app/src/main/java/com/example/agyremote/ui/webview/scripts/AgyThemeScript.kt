@@ -34,6 +34,23 @@ object AgyThemeScript {
                         main, [role="main"], #root, [class*="app-container"] {
                             transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
                         }
+                        /* Tối ưu hóa kích thước nút Send và Add context trên di động */
+                        button[data-testid="send-button"],
+                        button[data-tooltip-id="input-send-button-send-tooltip"] {
+                            min-width: 38px !important;
+                            min-height: 38px !important;
+                            width: 38px !important;
+                            height: 38px !important;
+                            padding: 7px !important;
+                            touch-action: manipulation !important;
+                            cursor: pointer !important;
+                        }
+                        button[aria-label="Add context"] {
+                            min-width: 36px !important;
+                            min-height: 36px !important;
+                            touch-action: manipulation !important;
+                            cursor: pointer !important;
+                        }
                     `;
                     document.head.appendChild(style);
                 }
