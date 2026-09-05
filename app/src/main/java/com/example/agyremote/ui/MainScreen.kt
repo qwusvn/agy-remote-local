@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -175,8 +176,33 @@ fun MainScreen(
         }
     }
 
+    // Tự động duy trì Foreground Service để nhận thông báo real-time khi bật thông báo
+    LaunchedEffect(config.hostIp, config.port, config.notificationsEnabled) {
+        if (config.notificationsEnabled && config.hostIp.isNotBlank()) {
+            try {
+                AgyNotificationService.start(context, config.hostIp, config.port)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        } else {
+            try {
+                AgyNotificationService.stop(context)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    var lastNotifiedTime by remember { mutableLongStateOf(0L) }
+
     // Phát chuông, rung và bắn Notification khi hoàn thành tác vụ
     fun notifyTaskCompleted(taskTitle: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotifiedTime < 2000L) {
+            return // Chống kích hoạt đúp trong vòng 2 giây
+        }
+        lastNotifiedTime = now
+
         try {
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -186,15 +212,19 @@ fun MainScreen(
                 context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(450, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 300, 150, 300), -1))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(450)
+                vibrator?.vibrate(longArrayOf(0, 300, 150, 300), -1)
             }
 
-            val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone = RingtoneManager.getRingtone(context, alertUri)
-            ringtone?.play()
+            try {
+                val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val ringtone = RingtoneManager.getRingtone(context, alertUri)
+                ringtone?.play()
+            } catch (e: Exception) {}
+
+            Toast.makeText(context, "🎉 Tác vụ hoàn tất: $taskTitle", Toast.LENGTH_SHORT).show()
 
             AgyNotificationService.showPushNotification(
                 context,
@@ -526,6 +556,9 @@ fun MainScreen(
                     onWorkingStatusChanged = { isWorking ->
                         viewModel.updateActiveTabWorking(isWorking)
                         handleWorkingStatusChanged(isWorking)
+                    },
+                    onTaskDone = { taskTitle ->
+                        notifyTaskCompleted(taskTitle.ifBlank { "Cuộc trò chuyện" })
                     },
                     onNavigationChanged = { screen ->
                         viewModel.addLog("NAV_VIEW", "Chuyển màn hình: $screen", false)

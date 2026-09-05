@@ -11,51 +11,95 @@ object AgySessionScript {
     fun getScript(): String = """
         (function() {
             try {
-                // 1. Giám sát trạng thái Agent isWorking
+                // Biến trạng thái phiên và tác vụ
+                let lastReportedTitle = '';
                 let lastWorkingState = false;
-                let consecutiveMatches = 0;
-                let consecutiveAbsents = 0;
+                let absentCount = 0;
+
+                // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn Antigravity
+                function isAgentActive() {
+                    try {
+                        // A. Nút Cancel trong ô nhập prompt (sFb component: data-tooltip-id="input-send-button-cancel-tooltip", chứa div.bg-red-500)
+                        const cancelPromptBtn = document.querySelector(
+                            'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
+                            'button[aria-label*="Cancel (" i], ' +
+                            'button[aria-label*="Cancel(" i], ' +
+                            'div[data-testid="send-button-pending"], ' +
+                            'button .bg-red-500, .bg-red-500'
+                        );
+                        if (cancelPromptBtn) return true;
+
+                        // B. Nút dừng Subagents, Background Tasks, hoặc Stop Execution trong danh sách
+                        const stopActionBtn = document.querySelector(
+                            'button[data-testid="subagent-stop"], ' +
+                            'button[aria-label*="Stop subagent" i], ' +
+                            'button[aria-label*="Cancel Task" i], ' +
+                            'button[aria-label*="Stop execution" i], ' +
+                            '[data-tooltip-id^="stop-task-"], ' +
+                            '[data-tooltip-id^="stop-subagent-"]'
+                        );
+                        if (stopActionBtn) return true;
+
+                        // C. Spinner trạng thái Cortex đang thực thi tác vụ
+                        const statusSpinner = document.querySelector(
+                            '[data-testid="status-loading-spinner"], ' +
+                            'svg[name="progress_activity"].animate-spin, ' +
+                            '.google-symbols.animate-spin'
+                        );
+                        if (statusSpinner) return true;
+
+                        // D. Nút Stop chung trong phần nội dung chính
+                        const generalStop = document.querySelector(
+                            'main button[aria-label*="Stop" i], ' +
+                            '[role="main"] button[aria-label*="Stop" i], ' +
+                            'button[aria-label="Stop generation" i]'
+                        );
+                        if (generalStop) return true;
+
+                        return false;
+                    } catch(e) {
+                        return false;
+                    }
+                }
 
                 function checkAgentStatus() {
                     try {
-                        let isWorking = false;
-                        const chatInput = document.querySelector('textarea, [contenteditable="true"], input[placeholder*="Ask" i]');
-                        if (chatInput) {
-                            const chatContainer = chatInput.closest('form, div.relative, [class*="chat-input"], [class*="input-container"]') || document.body;
-                            const stopBtn = chatContainer.querySelector('button[aria-label*="Stop" i], button[aria-label*="Cancel" i], button rect, button .lucide-square');
-                            if (stopBtn) isWorking = true;
-                        }
-
-                        if (!isWorking) {
-                            const explicitStopBtn = document.querySelector('button[aria-label="Stop generation" i], button[aria-label="Stop" i], button[aria-label="Cancel" i]');
-                            if (explicitStopBtn) isWorking = true;
-                        }
-
-                        if (!isWorking) {
-                            const streamActive = document.querySelector('[data-is-generating="true"], [class*="streaming-active"], [class*="thinking-bubble"]');
-                            if (streamActive) isWorking = true;
-                        }
+                        const isWorking = isAgentActive();
 
                         if (isWorking) {
-                            consecutiveMatches++;
-                            consecutiveAbsents = 0;
-                            if (consecutiveMatches >= 2 && !lastWorkingState) {
+                            absentCount = 0;
+                            if (!lastWorkingState) {
                                 lastWorkingState = true;
-                                if (window.AgyAndroidBridge) window.AgyAndroidBridge.reportWorkingStatus(true);
+                                if (window.AgyAndroidBridge && window.AgyAndroidBridge.reportWorkingStatus) {
+                                    window.AgyAndroidBridge.reportWorkingStatus(true);
+                                }
                             }
                         } else {
-                            consecutiveAbsents++;
-                            consecutiveMatches = 0;
-                            if (consecutiveAbsents >= 2 && lastWorkingState) {
-                                lastWorkingState = false;
-                                if (window.AgyAndroidBridge) window.AgyAndroidBridge.reportWorkingStatus(false);
+                            if (lastWorkingState) {
+                                absentCount++;
+                                // Cần vắng mặt liên tiếp 2 chu kỳ (600ms) để xác nhận Agent đã hoàn tất thực sự
+                                if (absentCount >= 2) {
+                                    lastWorkingState = false;
+                                    absentCount = 0;
+
+                                    if (window.AgyAndroidBridge) {
+                                        if (window.AgyAndroidBridge.reportWorkingStatus) {
+                                            window.AgyAndroidBridge.reportWorkingStatus(false);
+                                        }
+                                        if (window.AgyAndroidBridge.notifyTaskDone) {
+                                            window.AgyAndroidBridge.notifyTaskDone(lastReportedTitle || 'Cuộc trò chuyện Antigravity');
+                                        }
+                                    }
+                                }
+                            } else {
+                                absentCount = 0;
                             }
                         }
                     } catch(e) {}
                 }
 
                 if (!window.__agyMonitorInterval) {
-                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 400);
+                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 300);
                 }
 
                 // 2. Theo dõi active conversation path
@@ -74,7 +118,6 @@ object AgySessionScript {
                 trackActiveConvo();
 
                 // 3. Trích xuất tiêu đề phiên thực tế cho Android Tab
-                let lastReportedTitle = '';
                 function reportCurrentSession() {
                     try {
                         const p = window.location.pathname;

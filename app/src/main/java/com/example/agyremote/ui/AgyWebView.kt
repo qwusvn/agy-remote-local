@@ -232,11 +232,17 @@ class AgyJsBridge(
     private val onSwipeLeft: () -> Unit,
     private val onSwipeRight: () -> Unit,
     private val onNavigate: (String) -> Unit,
-    private val onSessionInfo: (String, String) -> Unit = { _, _ -> }
+    private val onSessionInfo: (String, String) -> Unit = { _, _ -> },
+    private val onTaskDone: (String) -> Unit = {}
 ) {
     @android.webkit.JavascriptInterface
     fun reportWorkingStatus(isWorking: Boolean) {
         onStatus(isWorking)
+    }
+
+    @android.webkit.JavascriptInterface
+    fun notifyTaskDone(taskTitle: String) {
+        onTaskDone(taskTitle)
     }
 
     @android.webkit.JavascriptInterface
@@ -271,6 +277,7 @@ fun AgyWebView(
     onPageFinished: (String) -> Unit = {},
     onTitleReceived: (String) -> Unit = {},
     onWorkingStatusChanged: (Boolean) -> Unit = {},
+    onTaskDone: (String) -> Unit = {},
     onNavigationChanged: (String) -> Unit = {},
     onSwipeLeftDetected: () -> Unit = {},
     onSwipeRightDetected: () -> Unit = {},
@@ -297,7 +304,16 @@ fun AgyWebView(
             // Cầu nối Javascript Interface
             addJavascriptInterface(
                 AgyJsBridge(
-                    onStatus = { isWorking -> onWorkingStatusChanged(isWorking) },
+                    onStatus = { isWorking ->
+                        post {
+                            onWorkingStatusChanged(isWorking)
+                        }
+                    },
+                    onTaskDone = { taskTitle ->
+                        post {
+                            onTaskDone(taskTitle)
+                        }
+                    },
                     onSwipeLeft = {
                         post {
                             performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)

@@ -8,6 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.agyremote.MainActivity
@@ -68,9 +73,16 @@ class AgyNotificationService : Service() {
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
                     description = "Duy trì kết nối thời gian thực với Antigravity trên máy tính"
+                    setShowBadge(false)
                 }
 
                 // 2. Kênh thông báo nổi (Heads-up Notification)
+                val alertSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build()
+
                 val alertChannel = NotificationChannel(
                     CHANNEL_ALERTS_ID,
                     "Cảnh báo & Tác vụ AGY",
@@ -79,7 +91,9 @@ class AgyNotificationService : Service() {
                     description = "Thông báo khi Agent hoàn tất tác vụ hoặc cần bạn phê duyệt lệnh"
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 300, 200, 300)
+                    setSound(alertSoundUri, audioAttributes)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                    setShowBadge(true)
                 }
 
                 manager.createNotificationChannel(fgChannel)
@@ -87,17 +101,48 @@ class AgyNotificationService : Service() {
             }
         }
 
+        fun playHapticAndAudio(context: Context) {
+            try {
+                // Kích hoạt rung máy
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                    vibratorManager?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 300, 150, 300), -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(longArrayOf(0, 300, 150, 300), -1)
+                }
+
+                // Phát âm thanh thông báo
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val ringtone = RingtoneManager.getRingtone(context, soundUri)
+                ringtone?.play()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         fun showPushNotification(context: Context, title: String, message: String, targetUrl: String? = null) {
             try {
                 ensureChannelsCreated(context)
+                playHapticAndAudio(context)
 
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
                     .setContentTitle(title)
                     .setContentText(message)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                     .setSmallIcon(R.drawable.ic_notification)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setSound(soundUri)
                     .setVibrate(longArrayOf(0, 300, 200, 300))
                     .setAutoCancel(true)
                     .setContentIntent(createOpenAppPendingIntent(context, targetUrl))
@@ -114,15 +159,19 @@ class AgyNotificationService : Service() {
         fun showSessionNotification(context: Context, convoId: String, title: String, message: String, targetUrl: String?) {
             try {
                 ensureChannelsCreated(context)
+                playHapticAndAudio(context)
 
                 val notifTitle = if (title.isNotBlank() && title != "Phiên Antigravity") "💬 $title" else "💬 Cuộc trò chuyện Antigravity"
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
                     .setContentTitle(notifTitle)
                     .setContentText(message)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setSound(soundUri)
                     .setVibrate(longArrayOf(0, 250, 150, 250))
                     .setAutoCancel(true)
                     .setContentIntent(createOpenAppPendingIntent(context, targetUrl))

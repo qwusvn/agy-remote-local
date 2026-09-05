@@ -19,12 +19,24 @@ import com.example.agyremote.data.ConnectionPreferences
 import com.example.agyremote.theme.AGYRemoteTheme
 import com.example.agyremote.ui.MainScreen
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     enableEdgeToEdge()
     com.example.agyremote.service.AgyNotificationService.ensureChannelsCreated(this)
+
+    // Tự động yêu cầu cấp quyền thông báo trên Android 13+ (API 33+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+      }
+    }
+
     setContent {
       val context = LocalContext.current
       val preferences = remember { ConnectionPreferences(context) }

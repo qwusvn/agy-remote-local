@@ -6,8 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
-    <!-- Quyền thông báo Android 13+ (API 33+) -->
+    <!-- Quyền thông báo & rung máy Android -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Quyền duy trì kết nối WebSocket nền -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

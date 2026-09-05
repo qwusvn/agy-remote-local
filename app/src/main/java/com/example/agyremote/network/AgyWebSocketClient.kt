@@ -128,14 +128,29 @@ class AgyWebSocketClient(
 
                 if (type == "AGENT_COMPLETED") {
                     val convoId = json?.optString("convoId") ?: ""
-                    val title = json?.optString("title") ?: "Phiên làm việc"
-                    val summary = json?.optString("summary") ?: "Agent đã hoàn thành tác vụ"
-                    val url = json?.optString("url") ?: ""
-                    _events.emit(AgyServerEvent.AgentCompleted(convoId, title, summary, url))
+                    val rawTitle = json?.optString("title") ?: "Phiên làm việc"
+                    var cleanTitle = rawTitle.replace("<USER_REQUEST>", "").replace("</USER_REQUEST>", "").trim()
+                    if (cleanTitle.contains("\n")) {
+                        cleanTitle = cleanTitle.split("\n").firstOrNull { it.isNotBlank() }?.trim() ?: cleanTitle
+                    }
+                    if (cleanTitle.length > 50) {
+                        cleanTitle = cleanTitle.take(47) + "..."
+                    }
+                    val summary = json?.optString("summary") ?: "Agent đã hoàn tất câu trả lời"
+                    val rawUrl = json?.optString("url") ?: ""
+                    val url = if (rawUrl.contains("localhost") || rawUrl.contains("127.0.0.1")) {
+                        rawUrl.replace("localhost", hostIp).replace("127.0.0.1", hostIp)
+                    } else if (rawUrl.isBlank() && convoId.isNotBlank()) {
+                        "http://$hostIp:$port/c/$convoId"
+                    } else {
+                        rawUrl
+                    }
+                    _events.emit(AgyServerEvent.AgentCompleted(convoId, cleanTitle.ifBlank { "Phiên làm việc" }, summary, url))
                 } else if (type == "SESSION_START" || type == "SESSION_WORKING") {
                     val convoId = json?.optString("convoId") ?: ""
-                    val title = json?.optString("title") ?: "Phiên làm việc"
-                    _events.emit(AgyServerEvent.SessionWorking(convoId, title))
+                    val rawTitle = json?.optString("title") ?: "Phiên làm việc"
+                    val cleanTitle = rawTitle.replace("<USER_REQUEST>", "").replace("</USER_REQUEST>", "").trim()
+                    _events.emit(AgyServerEvent.SessionWorking(convoId, cleanTitle.ifBlank { "Phiên làm việc" }))
                 } else if (rawText.contains("ASK_QUESTION") || rawText.contains("ask_question")) {
                     _events.emit(
                         AgyServerEvent.UserActionRequired("Antigravity đang chờ bạn trả lời hoặc chọn phương án")
