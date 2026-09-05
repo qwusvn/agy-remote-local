@@ -400,7 +400,15 @@ fun ConnectionDialog(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "AGY Remote v${com.example.agyremote.BuildConfig.VERSION_NAME} (Build ${com.example.agyremote.BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         },

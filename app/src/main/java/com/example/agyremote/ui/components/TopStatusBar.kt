@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
@@ -77,14 +78,18 @@ fun TopStatusBar(
                 .fillMaxWidth()
                 .height(38.dp)
                 .background(barBg)
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Bên trái: Đèn trạng thái kết nối & IP
+            // Bên trái: Đèn trạng thái kết nối, Version & IP (Click để mở cài đặt kết nối)
             Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { onOpenSettings() }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 if (isWorking) {
                     CircularProgressIndicator(
@@ -109,6 +114,13 @@ fun TopStatusBar(
                 )
 
                 Text(
+                    text = "v${com.example.agyremote.BuildConfig.VERSION_NAME}",
+                    fontSize = 9.sp,
+                    color = Color(0xFF94A3B8),
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Text(
                     text = "$hostIp:$port",
                     fontSize = 10.sp,
                     color = textColor.copy(alpha = 0.5f),
@@ -119,12 +131,12 @@ fun TopStatusBar(
             // Bên phải: Các nút công cụ thao tác
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 // Nút Chọn ảnh từ thiết bị
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onOpenImagePicker() },
                     contentAlignment = Alignment.Center
@@ -140,7 +152,7 @@ fun TopStatusBar(
                 // Nút Dán ảnh từ Clipboard
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onPasteClipboardImage() },
                     contentAlignment = Alignment.Center
@@ -167,7 +179,7 @@ fun TopStatusBar(
                 // Nút xem Log ADB
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onShowLogs() },
                     contentAlignment = Alignment.Center
@@ -194,7 +206,7 @@ fun TopStatusBar(
                 // Nút Tải lại trang
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onRefresh() },
                     contentAlignment = Alignment.Center
@@ -210,7 +222,7 @@ fun TopStatusBar(
                 // Nút Mở rộng thẻ Action của Agent (< >)
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onExpandActions() },
                     contentAlignment = Alignment.Center
@@ -226,7 +238,7 @@ fun TopStatusBar(
                 // Nút Cài đặt
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onOpenSettings() },
                     contentAlignment = Alignment.Center
@@ -242,7 +254,7 @@ fun TopStatusBar(
                 // Nút Thu gọn Dòng 1
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .clickable { onToggleCollapse() },
                     contentAlignment = Alignment.Center
