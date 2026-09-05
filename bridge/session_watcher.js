@@ -55,12 +55,29 @@ class SessionWatcher {
                     try {
                         const step = JSON.parse(lines[i]);
                         if (step.status === 'DONE' && step.step_index !== undefined) {
+                            // Chỉ thông báo kết luận cuối cùng cho người dùng:
+                            // Bỏ qua các bước trung gian gọi tool (có tool_calls), log thực thi (GENERIC), hoặc output lệnh
+                            if (step.type === 'GENERIC') continue;
+                            if (step.tool_calls && step.tool_calls.length > 0) continue;
+                            if (step.type !== 'PLANNER_RESPONSE' && step.type !== 'ASSISTANT') continue;
+
+                            const content = (step.content || '').trim();
+                            if (!content) continue;
+                            if (content.includes('Created At:') || 
+                                content.includes('Completed At:') || 
+                                content.includes('The command exited') || 
+                                content.includes('task-') ||
+                                content.startsWith('Step ') ||
+                                content.startsWith('Ran ')) {
+                                continue;
+                            }
+
                             const stepKey = `${convoId}_${step.step_index}`;
                             if (!this.knownDoneSteps.has(stepKey)) {
                                 this.knownDoneSteps.add(stepKey);
 
                                 const sessionTitle = this.extractSessionTitle(convoId);
-                                const answerSummary = (step.content || '').substring(0, 140).replace(/\n/g, ' ') || 'Agent đã hoàn tất câu trả lời';
+                                const answerSummary = content.substring(0, 140).replace(/\n/g, ' ') || 'Agent đã hoàn tất câu trả lời';
 
                                 console.log(`[WATCHER] 🔔 [HOÀN THÀNH TÁC VỤ] Phiên: "${sessionTitle}" (Convo: ${convoId})`);
 

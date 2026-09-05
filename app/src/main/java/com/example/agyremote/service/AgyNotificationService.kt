@@ -133,7 +133,16 @@ class AgyNotificationService : Service() {
 
         fun showPushNotification(context: Context, title: String, message: String, targetUrl: String? = null) {
             val now = System.currentTimeMillis()
-            if (now - lastNotifiedTime < 4000L && (message == lastNotifiedMessage || message.isBlank())) {
+            // Lọc triệt để theo yêu cầu: Chỉ hiện thông báo kết luận cuối cùng, bỏ qua toàn bộ log lệnh/tool/Created At
+            if (message.isBlank() || 
+                message.contains("Created At:") || 
+                message.contains("Completed At:") || 
+                message.contains("The command exited") ||
+                message.contains("task-")
+            ) {
+                return
+            }
+            if (now - lastNotifiedTime < 6000L && (message == lastNotifiedMessage || now - lastNotifiedTime < 3000L)) {
                 return
             }
             lastNotifiedTime = now
@@ -167,7 +176,19 @@ class AgyNotificationService : Service() {
 
         fun showSessionNotification(context: Context, convoId: String, title: String, message: String, targetUrl: String?) {
             val now = System.currentTimeMillis()
-            if (now - lastNotifiedTime < 4000L && (message == lastNotifiedMessage || message.isBlank())) {
+            // Lọc triệt để: Chỉ hiện thông báo kết luận cuối cùng, bỏ qua toàn bộ log lệnh/tool/Created At
+            if (message.isBlank() || 
+                message.contains("Created At:") || 
+                message.contains("Completed At:") || 
+                message.contains("The command exited") || 
+                message.contains("task-") ||
+                message.startsWith("Step ") ||
+                message.startsWith("Ran ") ||
+                message.startsWith("Edited ")
+            ) {
+                return
+            }
+            if (now - lastNotifiedTime < 6000L && (message == lastNotifiedMessage || now - lastNotifiedTime < 3000L)) {
                 return
             }
             lastNotifiedTime = now
@@ -289,7 +310,15 @@ class AgyNotificationService : Service() {
                     showPushNotification(this, "⚠️ Cần bạn xác nhận", event.question)
                 }
                 is AgyServerEvent.NotificationAlert -> {
-                    showPushNotification(this, event.title, event.body)
+                    val isToolLog = event.body.contains("Created At:") ||
+                                    event.body.contains("Completed At:") ||
+                                    event.body.contains("The command exited") ||
+                                    event.body.contains("task-") ||
+                                    event.body.startsWith("Step ") ||
+                                    event.body.startsWith("Ran ")
+                    if (!isToolLog && event.body.isNotBlank()) {
+                        showPushNotification(this, event.title, event.body)
+                    }
                 }
                 is AgyServerEvent.Connected -> {
                     updateForegroundNotification("🟢 Đang kết nối LAN: $hostIp:$port")

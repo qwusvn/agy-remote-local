@@ -42,6 +42,12 @@ class AgyResourceCache(context: Context) {
         if (url.contains("/stream") || url.contains("/agent_state") || url.contains("oauth-callback") || url.contains("code=")) return null
         if (path.startsWith("/api/")) return null
 
+        // Tuyệt đối không can thiệp các file script cốt lõi của Antigravity (main.js 9MB, prism_bundle.js).
+        // Để Chromium tự tải theo cơ chế streaming HTTP Native để tránh tràn RAM/timeout làm trắng trang.
+        if (path == "/main.js" || path == "/prism_bundle.js" || path.endsWith("/main.js") || path.endsWith("/prism_bundle.js")) {
+            return null
+        }
+
         // Chỉ cache các tài nguyên tĩnh: _next/static, JS chunks, CSS, fonts, ảnh
         val isNextStatic = path.contains("/_next/static/")
         val isStaticAsset = isNextStatic || isStaticExtension(path)
@@ -50,6 +56,9 @@ class AgyResourceCache(context: Context) {
 
         val hash = hashUrl(url)
         val cacheFile = File(cacheDir, "$hash.cache")
+        if (cacheFile.exists() && cacheFile.length() <= 0L) {
+            cacheFile.delete()
+        }
         val mimeType = getMimeType(path)
 
         val headers = mapOf(

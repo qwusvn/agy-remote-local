@@ -36,20 +36,28 @@ object AgyThemeScript {
                         }
                         /* Tối ưu hóa kích thước nút Send và Add context trên di động */
                         button[data-testid="send-button"],
-                        button[data-tooltip-id="input-send-button-send-tooltip"] {
-                            min-width: 38px !important;
-                            min-height: 38px !important;
-                            width: 38px !important;
-                            height: 38px !important;
-                            padding: 7px !important;
+                        button[data-tooltip-id="input-send-button-send-tooltip"],
+                        button[aria-label*="Send" i] {
+                            min-width: 44px !important;
+                            min-height: 44px !important;
+                            width: 44px !important;
+                            height: 44px !important;
+                            padding: 8px !important;
+                            touch-action: manipulation !important;
+                            cursor: pointer !important;
+                            pointer-events: auto !important;
+                            -webkit-tap-highlight-color: rgba(59, 130, 246, 0.4) !important;
+                        }
+                        button[aria-label="Add context"] {
+                            min-width: 40px !important;
+                            min-height: 40px !important;
                             touch-action: manipulation !important;
                             cursor: pointer !important;
                         }
-                        button[aria-label="Add context"] {
-                            min-width: 36px !important;
-                            min-height: 36px !important;
+                        [contenteditable="true"] {
                             touch-action: manipulation !important;
-                            cursor: pointer !important;
+                            -webkit-user-select: text !important;
+                            user-select: text !important;
                         }
                     `;
                     document.head.appendChild(style);

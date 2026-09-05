@@ -87,7 +87,13 @@ object AgySessionScript {
                                 !l.startsWith('Edited ') && 
                                 !l.startsWith('Explored ') &&
                                 !l.startsWith('Created At:') &&
-                                !l.startsWith('Completed At:')
+                                !l.startsWith('Completed At:') &&
+                                !l.startsWith('Task:') &&
+                                !l.startsWith('The command exited') &&
+                                !l.startsWith('Output:') &&
+                                !l.startsWith('Status:') &&
+                                !l.startsWith('Log:') &&
+                                !l.includes('task-')
                             );
                         
                         if (lines.length > 0) {
@@ -116,9 +122,9 @@ object AgySessionScript {
                         } else {
                             if (lastWorkingState) {
                                 absentCount++;
-                                // Cần duy trì trạng thái vắng mặt liên tục ít nhất 10 chu kỳ (3 giây)
+                                // Cần duy trì trạng thái vắng mặt liên tục ít nhất 20 chu kỳ (~6 giây)
                                 // để đảm bảo Agent đã kết thúc hoàn toàn thay vì chỉ tạm dừng giữa các bước gọi tool
-                                if (absentCount >= 10) {
+                                if (absentCount >= 20) {
                                     lastWorkingState = false;
                                     absentCount = 0;
 
@@ -128,10 +134,10 @@ object AgySessionScript {
                                         if (window.AgyAndroidBridge.reportWorkingStatus) {
                                             window.AgyAndroidBridge.reportWorkingStatus(false);
                                         }
-                                        if (window.AgyAndroidBridge.notifyTaskDone) {
+                                        if (window.AgyAndroidBridge.notifyTaskDone && conclusion && conclusion.length >= 5) {
                                             window.AgyAndroidBridge.notifyTaskDone(
                                                 lastReportedTitle || 'Cuộc trò chuyện Antigravity',
-                                                conclusion || ''
+                                                conclusion
                                             );
                                         }
                                     }

@@ -163,6 +163,43 @@ object AgyInputScript {
                     return false;
                 }
 
+                // Hàm kích hoạt gửi tin nhắn chuẩn xác cho Antigravity (dùng được cả từ nút bấm web, phím Enter, hoặc thanh TopStatusBar)
+                window.__agyTriggerSend = function() {
+                    try {
+                        const sendBtn = document.querySelector(
+                            'button[data-testid="send-button"], ' +
+                            'button[data-tooltip-id="input-send-button-send-tooltip"], ' +
+                            'button[aria-label*="Send message" i], ' +
+                            'button[aria-label*="Send" i]'
+                        );
+                        if (sendBtn) {
+                            if (sendBtn.disabled) {
+                                sendBtn.removeAttribute('disabled');
+                                sendBtn.disabled = false;
+                            }
+                            // 1. Kích hoạt trực tiếp React onClick handler nếu có trên Fiber/Props
+                            const propKey = Object.keys(sendBtn).find(k => k.startsWith('__reactProps'));
+                            if (propKey && sendBtn[propKey] && typeof sendBtn[propKey].onClick === 'function') {
+                                try {
+                                    sendBtn[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} });
+                                } catch(e) {}
+                            }
+                            // 2. Kích hoạt native click
+                            sendBtn.click();
+                            return true;
+                        }
+                        // Fallback: Dispatch Enter key event vào contenteditable
+                        const editor = document.querySelector('[contenteditable="true"]');
+                        if (editor) {
+                            editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                            return true;
+                        }
+                    } catch(err) {
+                        console.error('[AGY] __agyTriggerSend error:', err);
+                    }
+                    return false;
+                };
+
                 let lastHandledTimestamp = 0;
 
                 // Lắng nghe và đính kèm vào document
@@ -208,17 +245,29 @@ object AgyInputScript {
                         // B. Nếu người dùng không giữ phím Shift (Shift+Enter để xuống dòng):
                         // Gửi tin nhắn ngay lập tức nếu nút Send đang được kích hoạt (đã có chữ hoặc ảnh)
                         if (!e.shiftKey) {
-                            const sendBtn = document.querySelector('button[data-testid="send-button"], button[data-tooltip-id="input-send-button-send-tooltip"]');
-                            if (sendBtn && !sendBtn.disabled) {
+                            const sent = window.__agyTriggerSend();
+                            if (sent) {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 lastHandledTimestamp = Date.now();
-                                sendBtn.click();
                                 console.log('[AGY] Tin nhắn đã được gửi qua phím Enter.');
                                 return;
                             }
                         }
                     }, true);
+
+                    // 3. Đảm bảo chạm trực tiếp trên màn hình cảm ứng di động vào nút Send luôn phản hồi tức thì
+                    function handleSendTap(e) {
+                        const target = e.target;
+                        if (!target) return;
+                        const sendBtn = target.closest('button[data-testid="send-button"], button[data-tooltip-id="input-send-button-send-tooltip"], button[aria-label*="Send" i]');
+                        if (sendBtn) {
+                            window.__agyTriggerSend();
+                        }
+                    }
+
+                    doc.addEventListener('pointerdown', handleSendTap, true);
+                    doc.addEventListener('touchend', handleSendTap, true);
 
                     // 3. Bắt sự kiện chạm / click vào mục "Media" trong menu Add Context (+)
                     // Tránh lỗi Chromium: "File chooser dialog can only be shown with a user activation"

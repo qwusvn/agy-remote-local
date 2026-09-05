@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
@@ -63,6 +64,7 @@ fun TopStatusBar(
     onExpandActions: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleCollapse: () -> Unit,
+    onSendPrompt: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val barBg = Color(0xFF0F172A)
@@ -233,6 +235,25 @@ fun TopStatusBar(
                         modifier = Modifier.size(15.dp),
                         tint = Color(0xFF38BDF8)
                     )
+                }
+
+                // Nút Gửi tin nhắn nhanh (Native Quick Send)
+                if (onSendPrompt != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2563EB).copy(alpha = 0.35f))
+                            .clickable { onSendPrompt() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Gửi tin nhắn",
+                            modifier = Modifier.size(13.dp),
+                            tint = Color(0xFF60A5FA)
+                        )
+                    }
                 }
 
                 // Nút Cài đặt

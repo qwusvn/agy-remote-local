@@ -98,7 +98,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 }
 
-// Tự động lưu duy nhất 1 bản APK vào D:/apk theo Điều luật 9 (v1.5.0)
+// Tự động lưu duy nhất 1 bản APK vào D:/apk theo Điều luật 7 (v1.7.0)
 val copyApkTask = tasks.register("copyApkToTargetDir") {
     val buildDir = layout.buildDirectory
     doLast {
@@ -108,13 +108,23 @@ val copyApkTask = tasks.register("copyApkToTargetDir") {
         }
         val debugApk = buildDir.file("outputs/apk/debug/app-debug.apk").get().asFile
         if (debugApk.exists()) {
-            val dest = File(targetDir, "agy-remote-debug.apk")
-            debugApk.copyTo(dest, overwrite = true)
+            // Xóa tất cả các bản agy-remote*.apk cũ trong D:/apk để bảo đảm Rule 7: Duy nhất 1 bản APK
+            val existing = targetDir.listFiles()
+            if (existing != null) {
+                for (f in existing) {
+                    if (f.name.startsWith("agy-remote") && f.name.endsWith(".apk")) {
+                        f.delete()
+                    }
+                }
+            }
             // Xóa file trùng lặp app-debug.apk nếu có
             val duplicate = File(targetDir, "app-debug.apk")
             if (duplicate.exists()) {
                 duplicate.delete()
             }
+
+            val dest = File(targetDir, "agy-remote-debug 1.0.2.apk")
+            debugApk.copyTo(dest, overwrite = true)
         }
     }
 }

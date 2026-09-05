@@ -203,11 +203,16 @@ fun MainScreen(
         val now = System.currentTimeMillis()
         val textToNotify = if (conclusion.isNotBlank()) conclusion else "Đã hoàn thành: $taskTitle"
 
-        // Chống bắn thông báo trùng lặp hoặc bắn quá dày trong vòng 5 giây
-        if (now - lastNotifiedTime < 5000L && textToNotify == lastNotifiedConclusion) {
+        // Chỉ hiện thông báo kết luận cuối cùng, bỏ qua log lệnh nội bộ
+        if (textToNotify.contains("Created At:") || textToNotify.contains("Completed At:") || textToNotify.contains("task-")) {
             return
         }
-        if (now - lastNotifiedTime < 3000L) {
+
+        // Chống bắn thông báo trùng lặp hoặc bắn quá dày trong vòng 6 giây
+        if (now - lastNotifiedTime < 6000L && textToNotify == lastNotifiedConclusion) {
+            return
+        }
+        if (now - lastNotifiedTime < 4000L) {
             return
         }
         lastNotifiedTime = now
@@ -527,6 +532,10 @@ fun MainScreen(
                 onExpandActions = { expandAllActions() },
                 onOpenSettings = { showConnectionDialog = true },
                 onToggleCollapse = { isFullscreen = true },
+                onSendPrompt = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    webViewInstance?.evaluateJavascript("window.__agyTriggerSend && window.__agyTriggerSend();", null)
+                },
                 modifier = Modifier.statusBarsPadding()
             )
 
