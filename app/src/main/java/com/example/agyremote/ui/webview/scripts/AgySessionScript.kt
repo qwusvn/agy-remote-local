@@ -248,6 +248,72 @@ object AgySessionScript {
                         return false;
                     }
                 };
+
+                // 6. Hàm bơm ảnh Base64 trực tiếp vào khung chat (hỗ trợ Clipboard & File Upload)
+                window.agyInjectImage = function(base64Data, mimeType, fileName) {
+                    try {
+                        const type = mimeType || 'image/jpeg';
+                        const name = fileName || ('upload_' + Date.now() + '.jpg');
+
+                        const byteCharacters = atob(base64Data);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], { type: type });
+                        const file = new File([blob], name, { type: type, lastModified: Date.now() });
+
+                        // Cách 1: Gắn vào input[type="file"] của Antigravity
+                        const fileInputs = document.querySelectorAll('input[type="file"]');
+                        for (const input of fileInputs) {
+                            try {
+                                const dt = new DataTransfer();
+                                dt.items.add(file);
+                                input.files = dt.files;
+                                input.dispatchEvent(new Event('change', { bubbles: true }));
+                                console.log('[AGY] Image injected into input[type=file] successfully.');
+                                return true;
+                            } catch(e) {}
+                        }
+
+                        // Cách 2: Dispatch sự kiện paste vào Lexical Editor
+                        const editor = document.querySelector('[contenteditable="true"], textarea');
+                        if (editor) {
+                            try {
+                                const dt = new DataTransfer();
+                                dt.items.add(file);
+                                const pasteEvent = new ClipboardEvent('paste', {
+                                    clipboardData: dt,
+                                    bubbles: true,
+                                    cancelable: true
+                                });
+                                editor.dispatchEvent(pasteEvent);
+                                console.log('[AGY] Image injected via paste event successfully.');
+                                return true;
+                            } catch(e) {}
+                        }
+
+                        // Cách 3: Dispatch sự kiện drop lên window
+                        try {
+                            const dt = new DataTransfer();
+                            dt.items.add(file);
+                            const dropEvent = new DragEvent('drop', {
+                                dataTransfer: dt,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            window.dispatchEvent(dropEvent);
+                            console.log('[AGY] Image injected via drop event successfully.');
+                            return true;
+                        } catch(e) {}
+
+                        return false;
+                    } catch(err) {
+                        console.error('[AGY] Error in agyInjectImage:', err);
+                        return false;
+                    }
+                };
             } catch(err) {
                 console.error('[AGY] SessionScript Error:', err);
             }

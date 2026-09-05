@@ -202,6 +202,31 @@ fun navigateToAgyUrl(webView: WebView?, targetUrl: String, baseUrl: String) {
     }
 }
 
+/**
+ * Bơm ảnh trực tiếp vào giao diện web của Antigravity từ Base64
+ */
+fun injectImageIntoWebView(
+    webView: WebView?,
+    base64Data: String,
+    mimeType: String = "image/jpeg",
+    fileName: String = "image.jpg"
+) {
+    if (webView == null || base64Data.isBlank()) return
+    val js = """
+        (function() {
+            try {
+                if (typeof window.agyInjectImage === 'function') {
+                    return window.agyInjectImage('$base64Data', '$mimeType', '$fileName');
+                }
+            } catch(e) {
+                console.error('[AGY] injectImage error:', e);
+            }
+            return false;
+        })();
+    """.trimIndent()
+    webView.post { webView.evaluateJavascript(js, null) }
+}
+
 class AgyJsBridge(
     private val onStatus: (Boolean) -> Unit,
     private val onSwipeLeft: () -> Unit,
@@ -252,7 +277,7 @@ fun AgyWebView(
     onErrorReceived: (String) -> Unit = {},
     onLogReceived: (tag: String, message: String, isError: Boolean) -> Unit = { _, _, _ -> },
     onAuthCodeCaptured: (String) -> Unit = {},
-    onRequestFileChooser: (ValueCallback<Array<Uri>>) -> Unit = {},
+    onRequestFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams?) -> Unit = { _, _ -> },
     onSessionInfoReceived: (path: String, title: String) -> Unit = { _, _ -> },
     onWebViewCreated: (WebView) -> Unit = {}
 ) {
@@ -512,7 +537,7 @@ fun AgyWebView(
                     fileChooserParams: FileChooserParams?
                 ): Boolean {
                     if (filePathCallback != null) {
-                        onRequestFileChooser(filePathCallback)
+                        onRequestFileChooser(filePathCallback, fileChooserParams)
                         return true
                     }
                     return super.onShowFileChooser(webView, filePathCallback, fileChooserParams)

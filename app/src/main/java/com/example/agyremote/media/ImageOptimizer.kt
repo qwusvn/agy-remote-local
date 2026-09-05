@@ -69,11 +69,42 @@ object ImageOptimizer {
             }
             bitmap.recycle()
 
-            Uri.fromFile(outputFile)
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                outputFile
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * Chuyển đổi Uri thành chuỗi Base64 và MIME type để inject trực tiếp vào WebView
+     */
+    suspend fun getBase64Image(context: Context, uri: Uri): Pair<String, String>? = withContext(Dispatchers.IO) {
+        try {
+            val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
+            val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            Pair(base64, mimeType)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun cleanupOldUploads(context: Context) {
+        try {
+            val dir = File(context.cacheDir, "agy_uploads")
+            if (dir.exists()) {
+                val dayAgo = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                dir.listFiles()?.forEach { file ->
+                    if (file.lastModified() < dayAgo) file.delete()
+                }
+            }
+        } catch (e: Exception) {}
     }
 
     private fun calculateInSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {

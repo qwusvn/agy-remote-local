@@ -12,11 +12,11 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -225,30 +225,70 @@ fun MainScreen(
         }
     }
 
-    // Xử lý file/photo picker
+    // Xử lý File / Media Picker cho WebView
     var activeFilePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { selectedUri ->
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
         val callback = activeFilePathCallback
         activeFilePathCallback = null
 
-        if (selectedUri == null) {
+        if (result.resultCode != android.app.Activity.RESULT_OK || result.data == null) {
             callback?.onReceiveValue(null)
             return@rememberLauncherForActivityResult
         }
 
+        val intentData = result.data
         scope.launch(Dispatchers.IO) {
             try {
-                val optimizedUri = ImageOptimizer.optimizeImage(context, selectedUri) ?: selectedUri
+                val uris = mutableListOf<Uri>()
+                intentData?.clipData?.let { clip ->
+                    for (i in 0 until clip.itemCount) {
+                        uris.add(clip.getItemAt(i).uri)
+                    }
+                } ?: intentData?.data?.let { uris.add(it) }
+
+                if (uris.isEmpty()) {
+                    withContext(Dispatchers.Main) { callback?.onReceiveValue(null) }
+                    return@launch
+                }
+
+                // Xử lý tối ưu hóa ảnh và tạo content:// URI hợp lệ qua FileProvider
+                val finalUris = uris.map { rawUri ->
+                    val isImage = try {
+                        val mime = context.contentResolver.getType(rawUri) ?: ""
+                        mime.startsWith("image/") || rawUri.toString().lowercase().let {
+                            it.contains(".jpg") || it.contains(".jpeg") || it.contains(".png") || it.contains(".webp")
+                        }
+                    } catch (e: Exception) {
+                        false
+                    }
+
+                    if (isImage) {
+                        ImageOptimizer.optimizeImage(context, rawUri) ?: rawUri
+                    } else {
+                        rawUri
+                    }
+                }
+
                 withContext(Dispatchers.Main) {
-                    callback?.onReceiveValue(arrayOf(optimizedUri))
-                    viewModel.addLog("UPLOAD", "Đã chọn ảnh: ${optimizedUri.lastPathSegment}", false)
+                    finalUris.forEach { uri ->
+                        try {
+                            context.grantUriPermission(
+                                context.packageName,
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (e: Exception) {}
+                    }
+                    callback?.onReceiveValue(finalUris.toTypedArray())
+                    viewModel.addLog("UPLOAD", "Đã chọn ${finalUris.size} tệp thành công", false)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    callback?.onReceiveValue(arrayOf(selectedUri))
-                    viewModel.addLog("UPLOAD_ERR", "Lỗi nén ảnh: ${e.message}", true)
+                    val fallback = WebChromeClient.FileChooserParams.parseResult(result.resultCode, intentData)
+                    callback?.onReceiveValue(fallback)
+                    viewModel.addLog("UPLOAD_ERR", "Lỗi xử lý file: ${e.message}", true)
                 }
             }
         }
@@ -278,16 +318,29 @@ fun MainScreen(
 
         scope.launch(Dispatchers.IO) {
             try {
-                val optimizedUri = ImageOptimizer.optimizeImage(context, uri)
-                withContext(Dispatchers.Main) {
-                    if (optimizedUri != null) {
-                        Toast.makeText(context, "Đã chuẩn bị ảnh thành công", Toast.LENGTH_SHORT).show()
-                        viewModel.addLog("CLIPBOARD", "Đã dán ảnh từ clipboard", false)
+                // 1. Tối ưu hóa ảnh từ clipboard
+                val optimizedUri = ImageOptimizer.optimizeImage(context, uri) ?: uri
+                val result = ImageOptimizer.getBase64Image(context, optimizedUri)
+                    ?: ImageOptimizer.getBase64Image(context, uri)
+
+                if (result == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Không thể đọc ảnh từ clipboard", Toast.LENGTH_SHORT).show()
                     }
+                    return@launch
+                }
+
+                val (base64, mimeType) = result
+                withContext(Dispatchers.Main) {
+                    // 2. Bơm trực tiếp vào webview qua JavaScript
+                    injectImageIntoWebView(webViewInstance, base64, mimeType, "clipboard_${System.currentTimeMillis()}.jpg")
+                    Toast.makeText(context, "⚡ Đã dán ảnh thành công!", Toast.LENGTH_SHORT).show()
+                    viewModel.addLog("CLIPBOARD", "Đã dán ảnh từ clipboard vào phiên chat", false)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Lỗi đọc ảnh clipboard: ${e.message}", Toast.LENGTH_SHORT).show()
+                    viewModel.addLog("CLIPBOARD_ERR", "Lỗi dán ảnh: ${e.message}", true)
                 }
             }
         }
@@ -488,11 +541,22 @@ fun MainScreen(
                     onAuthCodeCaptured = { code ->
                         submitAuthCodeToHost(code)
                     },
-                    onRequestFileChooser = { callback ->
+                    onRequestFileChooser = { callback, params ->
+                        activeFilePathCallback?.onReceiveValue(null)
                         activeFilePathCallback = callback
-                        photoPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
+
+                        val intent = try {
+                            params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                                type = "*/*"
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                            }
+                        } catch (e: Exception) {
+                            Intent(Intent.ACTION_GET_CONTENT).apply {
+                                type = "*/*"
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                            }
+                        }
+                        filePickerLauncher.launch(intent)
                     },
                     onSessionInfoReceived = { path, title ->
                         viewModel.updateActiveTabSessionInfo(path, title, config.httpUrl)
