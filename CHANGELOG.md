@@ -1,8 +1,65 @@
-# Changelog - Antigravity (AGY) Global Rules & Guidelines
+# Changelog - AGY Remote & Antigravity Global System
 
-Tất cả các thay đổi, bổ sung và điều chỉnh cho bộ quy tắc toàn cục của Antigravity (AGY) được ghi chép chi tiết dưới đây theo chuẩn Semantic Versioning và Conventional Commits.
+Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh hệ thống được ghi chép chi tiết dưới đây theo chuẩn Semantic Versioning và Conventional Commits.
 
 ---
+
+## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
+
+### [1.0.2] - 2026-09-06
+- **Commit**: `2c44db4`
+- **Loại thay đổi**: `fix`, `feat`
+- **Tiêu đề**: `fix: update app branding to agy-remote-debug 1.0.2, fix send button, and restrict notifications to final conclusions`
+- **Chi tiết thay đổi**:
+  - **Định danh & Bản build**: Cập nhật tên ứng dụng hiển thị (App Name) và tên file APK thành `agy-remote-debug 1.0.2.apk` lưu tại `D:\apk` (duy trì đúng 1 bản duy nhất theo Quy tắc 7).
+  - **Sửa nút gửi tin nhắn (Send Button)**:
+    - Phóng to nút Send lên kích thước 44x44px trên di động, hỗ trợ `touch-action: manipulation` và bo góc mềm mại.
+    - Tích hợp `window.__agyTriggerSend()` kích hoạt trực tiếp hàm `onClick` từ React Fiber props và bắt sự kiện `pointerdown` / `touchend` tức thì.
+    - Bổ sung nút gửi nhanh trên thanh trạng thái gốc `TopStatusBar` (giao diện Compose) để luôn gửi được dù bàn phím ảo che khuất.
+  - **Sửa lỗi nạp WebView / Trắng trang**:
+    - Loại trừ các file bundle lớn (`/main.js` 9MB, `/prism_bundle.js`) khỏi bộ đệm nhị phân đồng bộ của OkHttp trong `AgyResourceCache`, giải quyết triệt để lỗi timeout và file cache rỗng.
+  - **Lọc triệt để thông báo rác**:
+    - Cập nhật `bridge/session_watcher.js` và `AgyNotificationService.kt` loại bỏ toàn bộ log lệnh trung gian (`Created At:`, `Completed At:`, `The command exited`, `task-`, `Step `, `Ran `).
+    - Chỉ gửi thông báo nổi (Heads-up Notification) khi Agent hoàn tất câu trả lời kết luận cuối cùng.
+
+---
+
+### [1.0.1] - 2026-09-05
+- **Commit**: `4b14170`
+- **Loại thay đổi**: `chore`, `fix`
+- **Tiêu đề**: `chore: bump version to 1.0.1 and display version in status bar and connection dialog`
+- **Chi tiết thay đổi**:
+  - Đánh dấu phiên bản `v1.0.1` hiển thị trực tiếp trên thanh `TopStatusBar` và `ConnectionDialog`.
+  - Tăng cường khả năng chống rung (debounce) cho hệ thống thông báo tác vụ hoàn thành.
+  - Nâng cấp độ tin cậy của bộ đệm tài nguyên mạng LAN.
+
+---
+
+### [1.0.0] - 2026-09-05
+- **Commit**: `2b28517`
+- **Loại thay đổi**: `feat`, `docs`
+- **Tiêu đề**: `feat: initial release of AGY Remote Android Client with local bridge`
+- **Chi tiết thay đổi**:
+  - Khởi tạo ứng dụng Android Native (Jetpack Compose) kết hợp WebView điều khiển Antigravity từ xa qua mạng nội bộ LAN.
+  - Tích hợp Node.js Bridge Server giám sát tiến trình và đồng bộ hóa thời gian thực qua WebSocket.
+  - Cơ chế SPA Navigation 0ms không reload trang, bảo tồn trạng thái đa tab.
+  - Hỗ trợ tải và chèn ảnh trực tiếp từ thư viện thiết bị và clipboard vào phiên chat.
+  - Bổ sung tài liệu mã nguồn mở `README.md` và giấy phép MIT.
+
+---
+
+## 📜 Bộ Quy tắc Toàn cục AGY (Global Guidelines History)
+
+### [v1.7.0] - 2026-09-04
+- **Commit**: `f74813e`
+- **Loại thay đổi**: `docs`
+- **Tiêu đề**: `docs(rules): update system rules to v1.7.0`
+- **Chi tiết thay đổi**:
+  - Cập nhật chuẩn hóa bộ quy tắc AGY toàn cục áp dụng cho mọi phiên làm việc.
+  - Tối ưu hóa điều phối Đa Agent Song song và chính sách xuất file APK cố định tại `D:\apk`.
+
+---
+
 ## [v1.6.1] - 2026-09-04
 - **Commit**: `eb97135` (`eb97135eb70dbd473173e1ab8d2ec56ecf9ed121`)
 - **Loại thay đổi**: `docs`
