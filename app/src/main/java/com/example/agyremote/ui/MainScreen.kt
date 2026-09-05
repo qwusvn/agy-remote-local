@@ -196,42 +196,31 @@ fun MainScreen(
     }
 
     var lastNotifiedTime by remember { mutableLongStateOf(0L) }
+    var lastNotifiedConclusion by remember { mutableStateOf("") }
 
-    // Phát chuông, rung và bắn Notification khi hoàn thành tác vụ
-    fun notifyTaskCompleted(taskTitle: String) {
+    // Bắn Notification khi hoàn thành tác vụ (Chỉ hiện thông báo kết luận cuối cùng)
+    fun notifyTaskCompleted(taskTitle: String, conclusion: String = "") {
         val now = System.currentTimeMillis()
-        if (now - lastNotifiedTime < 2000L) {
-            return // Chống kích hoạt đúp trong vòng 2 giây
+        val textToNotify = if (conclusion.isNotBlank()) conclusion else "Đã hoàn thành: $taskTitle"
+
+        // Chống bắn thông báo trùng lặp hoặc bắn quá dày trong vòng 5 giây
+        if (now - lastNotifiedTime < 5000L && textToNotify == lastNotifiedConclusion) {
+            return
+        }
+        if (now - lastNotifiedTime < 3000L) {
+            return
         }
         lastNotifiedTime = now
+        lastNotifiedConclusion = textToNotify
 
         try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 300, 150, 300), -1))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(longArrayOf(0, 300, 150, 300), -1)
-            }
-
-            try {
-                val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                val ringtone = RingtoneManager.getRingtone(context, alertUri)
-                ringtone?.play()
-            } catch (e: Exception) {}
-
-            Toast.makeText(context, "🎉 Tác vụ hoàn tất: $taskTitle", Toast.LENGTH_SHORT).show()
+            val title = if (taskTitle.isNotBlank() && taskTitle != "Cuộc trò chuyện") "✅ $taskTitle" else "✅ Hoàn tất câu trả lời"
+            Toast.makeText(context, "$title\n$textToNotify", Toast.LENGTH_SHORT).show()
 
             AgyNotificationService.showPushNotification(
                 context,
-                "🎉 Agent đã hoàn thành tác vụ!",
-                taskTitle
+                title,
+                textToNotify
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -241,11 +230,8 @@ fun MainScreen(
     // Xử lý sự kiện thay đổi trạng thái Working từ WebView
     fun handleWorkingStatusChanged(isWorking: Boolean) {
         viewModel.updateActiveTabWorking(isWorking)
-
-        if (previousWorkingState && !isWorking) {
-            val currentTab = tabs.find { it.id == activeTabId }
-            notifyTaskCompleted(currentTab?.title ?: "Cuộc trò chuyện")
-        }
+        // Chỉ cập nhật cờ UI trạng thái tab, KHÔNG bắn thông báo tại đây để tránh spam giữa các bước tool call.
+        // Thông báo kết luận cuối cùng được kích hoạt bởi onTaskDone sau 3s debounce ổn định.
         previousWorkingState = isWorking
     }
 
@@ -600,8 +586,8 @@ fun MainScreen(
                         viewModel.updateActiveTabWorking(isWorking)
                         handleWorkingStatusChanged(isWorking)
                     },
-                    onTaskDone = { taskTitle ->
-                        notifyTaskCompleted(taskTitle.ifBlank { "Cuộc trò chuyện" })
+                    onTaskDone = { taskTitle, conclusion ->
+                        notifyTaskCompleted(taskTitle.ifBlank { "Cuộc trò chuyện" }, conclusion)
                     },
                     onNavigationChanged = { screen ->
                         viewModel.addLog("NAV_VIEW", "Chuyển màn hình: $screen", false)

@@ -128,7 +128,17 @@ class AgyNotificationService : Service() {
             }
         }
 
+        private var lastNotifiedTime: Long = 0L
+        private var lastNotifiedMessage: String = ""
+
         fun showPushNotification(context: Context, title: String, message: String, targetUrl: String? = null) {
+            val now = System.currentTimeMillis()
+            if (now - lastNotifiedTime < 4000L && (message == lastNotifiedMessage || message.isBlank())) {
+                return
+            }
+            lastNotifiedTime = now
+            lastNotifiedMessage = message
+
             try {
                 ensureChannelsCreated(context)
                 playHapticAndAudio(context)
@@ -149,14 +159,20 @@ class AgyNotificationService : Service() {
                     .build()
 
                 val manager = NotificationManagerCompat.from(context)
-                val id = (System.currentTimeMillis() % 10000).toInt() + 2000
-                manager.notify(id, notification)
+                manager.notify(NOTIFICATION_ALERT_ID, notification)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
 
         fun showSessionNotification(context: Context, convoId: String, title: String, message: String, targetUrl: String?) {
+            val now = System.currentTimeMillis()
+            if (now - lastNotifiedTime < 4000L && (message == lastNotifiedMessage || message.isBlank())) {
+                return
+            }
+            lastNotifiedTime = now
+            lastNotifiedMessage = message
+
             try {
                 ensureChannelsCreated(context)
                 playHapticAndAudio(context)
@@ -178,7 +194,7 @@ class AgyNotificationService : Service() {
                     .build()
 
                 val manager = NotificationManagerCompat.from(context)
-                val id = (convoId.hashCode() and 0x7FFFFFFF) % 10000 + 3000
+                val id = if (convoId.isNotBlank()) (convoId.hashCode() and 0x7FFFFFFF) % 10000 + 3000 else NOTIFICATION_ALERT_ID
                 manager.notify(id, notification)
             } catch (e: Exception) {
                 e.printStackTrace()

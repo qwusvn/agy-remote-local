@@ -233,7 +233,7 @@ class AgyJsBridge(
     private val onSwipeRight: () -> Unit,
     private val onNavigate: (String) -> Unit,
     private val onSessionInfo: (String, String) -> Unit = { _, _ -> },
-    private val onTaskDone: (String) -> Unit = {},
+    private val onTaskDone: (String, String) -> Unit = { _, _ -> },
     private val onOpenImagePicker: () -> Unit = {}
 ) {
     @android.webkit.JavascriptInterface
@@ -243,7 +243,12 @@ class AgyJsBridge(
 
     @android.webkit.JavascriptInterface
     fun notifyTaskDone(taskTitle: String) {
-        onTaskDone(taskTitle)
+        onTaskDone(taskTitle, "")
+    }
+
+    @android.webkit.JavascriptInterface
+    fun notifyTaskDone(taskTitle: String, conclusion: String) {
+        onTaskDone(taskTitle, conclusion)
     }
 
     @android.webkit.JavascriptInterface
@@ -283,7 +288,7 @@ fun AgyWebView(
     onPageFinished: (String) -> Unit = {},
     onTitleReceived: (String) -> Unit = {},
     onWorkingStatusChanged: (Boolean) -> Unit = {},
-    onTaskDone: (String) -> Unit = {},
+    onTaskDone: (String, String) -> Unit = { _, _ -> },
     onNavigationChanged: (String) -> Unit = {},
     onSwipeLeftDetected: () -> Unit = {},
     onSwipeRightDetected: () -> Unit = {},
@@ -316,9 +321,9 @@ fun AgyWebView(
                             onWorkingStatusChanged(isWorking)
                         }
                     },
-                    onTaskDone = { taskTitle ->
+                    onTaskDone = { taskTitle, conclusion ->
                         post {
-                            onTaskDone(taskTitle)
+                            onTaskDone(taskTitle, conclusion)
                         }
                     },
                     onSwipeLeft = {

@@ -62,6 +62,45 @@ object AgySessionScript {
                     }
                 }
 
+                // Trích xuất kết luận cuối cùng của Agent từ DOM cuộc trò chuyện
+                function extractFinalConclusion() {
+                    try {
+                        const articles = document.querySelectorAll('div[role="article"][aria-label="Agent response"], div[role="article"]');
+                        if (!articles || articles.length === 0) return '';
+                        const lastArt = articles[articles.length - 1];
+                        
+                        const clone = lastArt.cloneNode(true);
+                        // Loại bỏ các khối công cụ, terminal và collapsible phụ
+                        const removable = clone.querySelectorAll(
+                            '[data-testid="worked-for-collapsible"], [data-testid^="tool-"], [class*="collapsible"], button, svg, [role="button"], pre'
+                        );
+                        for (let el of removable) {
+                            el.parentElement?.removeChild(el);
+                        }
+                        
+                        let text = clone.innerText || '';
+                        const lines = text.split('\n')
+                            .map(l => l.trim())
+                            .filter(l => l.length > 0 && 
+                                !l.startsWith('Worked for') && 
+                                !l.startsWith('Ran ') && 
+                                !l.startsWith('Edited ') && 
+                                !l.startsWith('Explored ') &&
+                                !l.startsWith('Created At:') &&
+                                !l.startsWith('Completed At:')
+                            );
+                        
+                        if (lines.length > 0) {
+                            let summary = lines.slice(0, 3).join(' ');
+                            if (summary.length > 200) {
+                                summary = summary.substring(0, 197) + '...';
+                            }
+                            return summary;
+                        }
+                    } catch(e) {}
+                    return '';
+                }
+
                 function checkAgentStatus() {
                     try {
                         const isWorking = isAgentActive();
@@ -77,17 +116,23 @@ object AgySessionScript {
                         } else {
                             if (lastWorkingState) {
                                 absentCount++;
-                                // Cần vắng mặt liên tiếp 2 chu kỳ (600ms) để xác nhận Agent đã hoàn tất thực sự
-                                if (absentCount >= 2) {
+                                // Cần duy trì trạng thái vắng mặt liên tục ít nhất 10 chu kỳ (3 giây)
+                                // để đảm bảo Agent đã kết thúc hoàn toàn thay vì chỉ tạm dừng giữa các bước gọi tool
+                                if (absentCount >= 10) {
                                     lastWorkingState = false;
                                     absentCount = 0;
+
+                                    const conclusion = extractFinalConclusion();
 
                                     if (window.AgyAndroidBridge) {
                                         if (window.AgyAndroidBridge.reportWorkingStatus) {
                                             window.AgyAndroidBridge.reportWorkingStatus(false);
                                         }
                                         if (window.AgyAndroidBridge.notifyTaskDone) {
-                                            window.AgyAndroidBridge.notifyTaskDone(lastReportedTitle || 'Cuộc trò chuyện Antigravity');
+                                            window.AgyAndroidBridge.notifyTaskDone(
+                                                lastReportedTitle || 'Cuộc trò chuyện Antigravity',
+                                                conclusion || ''
+                                            );
                                         }
                                     }
                                 }

@@ -1,6 +1,6 @@
 # AGY Remote - Android Client cho Antigravity AI 🚀
 
-[![Release](https://img.shields.io/badge/Release-v1.0.1-brightgreen.svg)](https://github.com/qwusvn/agy-remote-local/releases)
+[![Release](https://img.shields.io/badge/Release-v1.0.2-brightgreen.svg)](https://github.com/qwusvn/agy-remote-local/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org)
 [![Android Gradle Plugin](https://img.shields.io/badge/AGP-8.7.3-blue.svg)](https://developer.android.com/studio/releases/gradle-plugin)
 [![Compose](https://img.shields.io/badge/Jetpack_Compose-2024.12.01-green.svg)](https://developer.android.com/jetpack/compose)

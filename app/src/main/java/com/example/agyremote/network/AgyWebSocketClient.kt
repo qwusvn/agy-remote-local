@@ -155,18 +155,16 @@ class AgyWebSocketClient(
                     _events.emit(
                         AgyServerEvent.UserActionRequired("Antigravity đang chờ bạn trả lời hoặc chọn phương án")
                     )
-                } else if (rawText.contains("PLANNER_RESPONSE") && (rawText.contains("\"DONE\"") || rawText.contains("\"FINISH\""))) {
-                    _events.emit(
-                        AgyServerEvent.AgentCompleted("", "Antigravity", "Antigravity đã hoàn thành tác vụ hiện tại", "")
-                    )
                 } else if (rawText.contains("request_review") || rawText.contains("AutoRunDecision")) {
                     _events.emit(
                         AgyServerEvent.UserActionRequired("Antigravity yêu cầu xác nhận chạy lệnh hệ thống")
                     )
-                } else if (type == "notification" || rawText.contains("CASCADE_SELECT_NOTIFICATION")) {
-                    val title = json?.optString("title") ?: "Thông báo từ Antigravity"
-                    val body = json?.optString("body") ?: "Có cập nhật mới từ tiến trình"
-                    _events.emit(AgyServerEvent.NotificationAlert(title, body))
+                } else if (type == "notification") {
+                    val title = json?.optString("title") ?: ""
+                    val body = json?.optString("body") ?: ""
+                    if (title.isNotBlank() && body.isNotBlank()) {
+                        _events.emit(AgyServerEvent.NotificationAlert(title, body))
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
