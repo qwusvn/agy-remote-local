@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.sp
 
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Terminal
 
 /**
  * Thanh trạng thái phía trên (Statusbar 1).
@@ -57,14 +60,18 @@ fun TopStatusBar(
     isCollapsed: Boolean,
     errorCount: Int,
     clipboardImageUri: Uri?,
+    isCodingBarVisible: Boolean = false,
+    onOpenCamera: () -> Unit = {},
     onOpenImagePicker: () -> Unit,
     onPasteClipboardImage: () -> Unit,
+    onToggleCodingBar: () -> Unit = {},
     onShowLogs: () -> Unit,
     onRefresh: () -> Unit,
     onExpandActions: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleCollapse: () -> Unit,
     onSendPrompt: (() -> Unit)? = null,
+    onCancelPrompt: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val barBg = Color(0xFF0F172A)
@@ -135,6 +142,22 @@ fun TopStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(1.dp)
             ) {
+                // Nút Chụp ảnh từ Camera
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable { onOpenCamera() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.PhotoCamera,
+                        contentDescription = "Chụp ảnh từ camera",
+                        modifier = Modifier.size(15.dp),
+                        tint = Color(0xFF38BDF8)
+                    )
+                }
+
                 // Nút Chọn ảnh từ thiết bị
                 Box(
                     modifier = Modifier
@@ -176,6 +199,22 @@ fun TopStatusBar(
                             tint = if (clipboardImageUri != null) Color(0xFF22C55E) else textColor.copy(alpha = 0.5f)
                         )
                     }
+                }
+
+                // Nút Bật/Tắt Thanh phím tắt Lập trình nhanh
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable { onToggleCodingBar() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Terminal,
+                        contentDescription = "Thanh phím tắt lập trình",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (isCodingBarVisible) Color(0xFF38BDF8) else textColor.copy(alpha = 0.5f)
+                    )
                 }
 
                 // Nút xem Log ADB
@@ -237,8 +276,24 @@ fun TopStatusBar(
                     )
                 }
 
-                // Nút Gửi tin nhắn nhanh (Native Quick Send)
-                if (onSendPrompt != null) {
+                // Nút Gửi hoặc Nút Dừng Khẩn Cấp Thông Minh (Smart Send / Stop)
+                if (isWorking && onCancelPrompt != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFEF4444).copy(alpha = 0.35f))
+                            .clickable { onCancelPrompt() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = "Dừng Agent khẩn cấp",
+                            modifier = Modifier.size(14.dp),
+                            tint = Color(0xFFF87171)
+                        )
+                    }
+                } else if (onSendPrompt != null) {
                     Box(
                         modifier = Modifier
                             .size(24.dp)

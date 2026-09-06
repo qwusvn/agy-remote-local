@@ -55,9 +55,7 @@ object AgyActionScript {
                     } catch(e) {}
                 }
 
-                if (!window.__agyExpandActionsInterval) {
-                    window.__agyExpandActionsInterval = setInterval(expandToolActions, 600);
-                }
+                // Mở rộng ban đầu một lần khi tải trang
                 expandToolActions();
             } catch(err) {
                 console.error('[AGY] ActionScript Error:', err);

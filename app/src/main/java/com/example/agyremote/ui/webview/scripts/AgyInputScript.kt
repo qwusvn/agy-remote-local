@@ -163,9 +163,17 @@ object AgyInputScript {
                     return false;
                 }
 
+                let lastSendTimestamp = 0;
+
                 // Hàm kích hoạt gửi tin nhắn chuẩn xác cho Antigravity (dùng được cả từ nút bấm web, phím Enter, hoặc thanh TopStatusBar)
                 window.__agyTriggerSend = function() {
                     try {
+                        const now = Date.now();
+                        if (now - lastSendTimestamp < 400) {
+                            return true;
+                        }
+                        lastSendTimestamp = now;
+
                         const sendBtn = document.querySelector(
                             'button[data-testid="send-button"], ' +
                             'button[data-tooltip-id="input-send-button-send-tooltip"], ' +
@@ -182,20 +190,52 @@ object AgyInputScript {
                             if (propKey && sendBtn[propKey] && typeof sendBtn[propKey].onClick === 'function') {
                                 try {
                                     sendBtn[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} });
+                                    return true;
                                 } catch(e) {}
                             }
-                            // 2. Kích hoạt native click
+                            // 2. Fallback: Native click
                             sendBtn.click();
                             return true;
                         }
-                        // Fallback: Dispatch Enter key event vào contenteditable
-                        const editor = document.querySelector('[contenteditable="true"]');
-                        if (editor) {
-                            editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                // Hàm chèn text vào editor hiện tại (dùng cho Accessory Coding Bar)
+                window.__agyInsertText = function(text) {
+                    try {
+                        const target = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea, input[type="text"]');
+                        if (!target) return false;
+                        target.focus();
+                        if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') {
+                            return insertIntoContentEditable(target, text);
+                        } else {
+                            const val = target.value || '';
+                            const start = target.selectionStart ?? val.length;
+                            const end = target.selectionEnd ?? val.length;
+                            const newVal = val.substring(0, start) + text + val.substring(end);
+                            updateNativeTextareaValue(target, newVal, start + text.length);
                             return true;
                         }
-                    } catch(err) {
-                        console.error('[AGY] __agyTriggerSend error:', err);
+                    } catch(e) {
+                        console.error('[AGY] __agyInsertText error:', e);
+                    }
+                    return false;
+                };
+
+                // Hàm xóa trắng ô nhập
+                window.__agyClearInput = function() {
+                    try {
+                        const editor = document.querySelector('[contenteditable="true"]');
+                        if (editor) {
+                            editor.focus();
+                            document.execCommand('selectAll', false, null);
+                            document.execCommand('delete', false, null);
+                            return true;
+                        }
+                        const textarea = document.querySelector('textarea, input[type="text"]');
+                        if (textarea) {
+                            updateNativeTextareaValue(textarea, '', 0);
+                            return true;
+                        }
+                    } catch(e) {
+                        console.error('[AGY] __agyClearInput error:', e);
                     }
                     return false;
                 };
@@ -262,6 +302,9 @@ object AgyInputScript {
                         if (!target) return;
                         const sendBtn = target.closest('button[data-testid="send-button"], button[data-tooltip-id="input-send-button-send-tooltip"], button[aria-label*="Send" i]');
                         if (sendBtn) {
+                            if (e.type === 'pointerdown') {
+                                e.preventDefault();
+                            }
                             window.__agyTriggerSend();
                         }
                     }

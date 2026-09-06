@@ -76,6 +76,7 @@ import com.example.agyremote.data.ConnectionConfig
 import com.example.agyremote.data.ConnectionPreferences
 import com.example.agyremote.media.ImageOptimizer
 import com.example.agyremote.service.AgyNotificationService
+import com.example.agyremote.ui.components.AccessoryCodingBar
 import com.example.agyremote.ui.components.LogsBottomSheet
 import com.example.agyremote.ui.components.TabBar
 import com.example.agyremote.ui.components.TopStatusBar
@@ -122,6 +123,7 @@ fun MainScreen(
 
     var showConnectionDialog by remember { mutableStateOf(false) }
     var showLogsSheet by remember { mutableStateOf(false) }
+    var showCodingBar by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
@@ -245,6 +247,41 @@ fun MainScreen(
         webViewInstance?.evaluateJavascript(AgyActionScript.getForceExpandScript()) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             Toast.makeText(context, "⚡ Đã mở rộng toàn bộ thẻ Action", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Launcher chụp ảnh trực tiếp từ Camera
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap == null) return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            try {
+                val outputDir = java.io.File(context.cacheDir, "agy_uploads").apply { mkdirs() }
+                val outputFile = java.io.File(outputDir, "cam_${System.currentTimeMillis()}.jpg")
+                java.io.FileOutputStream(outputFile).use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    outputFile
+                )
+                val result = ImageOptimizer.getBase64Image(context, uri)
+                if (result != null) {
+                    val (base64, mimeType) = result
+                    val fileName = "cam_${System.currentTimeMillis()}.jpg"
+                    withContext(Dispatchers.Main) {
+                        injectImageIntoWebView(webViewInstance, base64, mimeType, fileName)
+                        Toast.makeText(context, "⚡ Đã đính kèm ảnh chụp camera!", Toast.LENGTH_SHORT).show()
+                        viewModel.addLog("CAMERA", "Đã đính kèm ảnh camera vào phiên chat", false)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    viewModel.addLog("CAM_ERR", "Lỗi nạp ảnh camera: ${e.message}", true)
+                }
+            }
         }
     }
 
@@ -521,8 +558,11 @@ fun MainScreen(
                 isCollapsed = isFullscreen,
                 errorCount = errorCount,
                 clipboardImageUri = clipboardImageUri,
+                isCodingBarVisible = showCodingBar,
+                onOpenCamera = { cameraLauncher.launch(null) },
                 onOpenImagePicker = { imagePickerLauncher.launch("image/*") },
                 onPasteClipboardImage = { pasteClipboardImage() },
+                onToggleCodingBar = { showCodingBar = !showCodingBar },
                 onShowLogs = { showLogsSheet = true },
                 onRefresh = {
                     errorMessage = null
@@ -535,6 +575,10 @@ fun MainScreen(
                 onSendPrompt = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     webViewInstance?.evaluateJavascript("window.__agyTriggerSend && window.__agyTriggerSend();", null)
+                },
+                onCancelPrompt = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    webViewInstance?.evaluateJavascript("window.__agyTriggerStop && window.__agyTriggerStop();", null)
                 },
                 modifier = Modifier.statusBarsPadding()
             )
@@ -563,6 +607,22 @@ fun MainScreen(
                 onToggleSidebar = { toggleAgySidebar(webViewInstance) },
                 onRestoreFullscreen = { isFullscreen = false }
             )
+
+            // 2.1 THANH PHÍM TẮT LẬP TRÌNH NHANH (ACCESSORY CODING BAR)
+            if (showCodingBar) {
+                AccessoryCodingBar(
+                    onInsertText = { text ->
+                        val escaped = text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                        webViewInstance?.evaluateJavascript("window.__agyInsertText && window.__agyInsertText('$escaped');", null)
+                    },
+                    onInsertNewline = {
+                        webViewInstance?.evaluateJavascript("window.__agyInsertText && window.__agyInsertText('\\n');", null)
+                    },
+                    onClearInput = {
+                        webViewInstance?.evaluateJavascript("window.__agyClearInput && window.__agyClearInput();", null)
+                    }
+                )
+            }
 
             // 3. VÙNG HIỂN THỊ NỘI DUNG WEBVIEW DUY NHẤT (ĐIỀU HƯỚNG SPA SIÊU TỐC 0MS - KHÔNG RELOAD - DISK CACHE)
             Box(

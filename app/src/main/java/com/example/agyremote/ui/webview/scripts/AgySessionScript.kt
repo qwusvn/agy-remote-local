@@ -13,8 +13,39 @@ object AgySessionScript {
             try {
                 // Biến trạng thái phiên và tác vụ
                 let lastReportedTitle = '';
+                let lastReportedHref = '';
                 let lastWorkingState = false;
                 let absentCount = 0;
+
+                // Hàm hủy/dừng Agent khẩn cấp (gọi từ nút Stop trên TopStatusBar)
+                window.__agyTriggerStop = function() {
+                    try {
+                        const cancelBtn = document.querySelector(
+                            'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
+                            'button[aria-label*="Cancel (" i], ' +
+                            'button[aria-label*="Cancel(" i], ' +
+                            'button[aria-label="Stop generation" i], ' +
+                            'main button[aria-label*="Stop" i], ' +
+                            '[role="main"] button[aria-label*="Stop" i], ' +
+                            'button[data-testid="subagent-stop"], ' +
+                            'button .bg-red-500, .bg-red-500'
+                        );
+                        if (cancelBtn) {
+                            const btn = cancelBtn.tagName === 'BUTTON' ? cancelBtn : cancelBtn.closest('button');
+                            if (btn) {
+                                const propKey = Object.keys(btn).find(k => k.startsWith('__reactProps'));
+                                if (propKey && btn[propKey] && typeof btn[propKey].onClick === 'function') {
+                                    try { btn[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} }); } catch(e) {}
+                                }
+                                btn.click();
+                                return true;
+                            }
+                        }
+                    } catch(e) {
+                        console.error('[AGY] __agyTriggerStop error:', e);
+                    }
+                    return false;
+                };
 
                 // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn Antigravity
                 function isAgentActive() {
@@ -129,15 +160,16 @@ object AgySessionScript {
                                     absentCount = 0;
 
                                     const conclusion = extractFinalConclusion();
+                                    const finalMsg = (conclusion && conclusion.length >= 2) ? conclusion : 'Agent đã hoàn tất câu trả lời';
 
                                     if (window.AgyAndroidBridge) {
                                         if (window.AgyAndroidBridge.reportWorkingStatus) {
                                             window.AgyAndroidBridge.reportWorkingStatus(false);
                                         }
-                                        if (window.AgyAndroidBridge.notifyTaskDone && conclusion && conclusion.length >= 5) {
+                                        if (window.AgyAndroidBridge.notifyTaskDone) {
                                             window.AgyAndroidBridge.notifyTaskDone(
                                                 lastReportedTitle || 'Cuộc trò chuyện Antigravity',
-                                                conclusion
+                                                finalMsg
                                             );
                                         }
                                     }
@@ -150,7 +182,7 @@ object AgySessionScript {
                 }
 
                 if (!window.__agyMonitorInterval) {
-                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 300);
+                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 800);
                 }
 
                 // 2. Theo dõi active conversation path
@@ -164,7 +196,7 @@ object AgySessionScript {
                     } catch(e) {}
                 }
                 if (!window.__agyTrackInterval) {
-                    window.__agyTrackInterval = setInterval(trackActiveConvo, 500);
+                    window.__agyTrackInterval = setInterval(trackActiveConvo, 1000);
                 }
                 trackActiveConvo();
 
@@ -262,14 +294,19 @@ object AgySessionScript {
                 };
 
                 if (!window.__agySessionTitleInterval) {
-                    window.__agySessionTitleInterval = setInterval(reportCurrentSession, 300);
+                    window.__agySessionTitleInterval = setInterval(reportCurrentSession, 1000);
                 }
                 reportCurrentSession();
 
-                // 4. Quan sát thay đổi DOM để kích hoạt cập nhật ngầm
+                // 4. Quan sát thay đổi DOM với debounce để tránh giật lag thread JS
                 if (!window.__agyRealtimeDomWatcher) {
+                    let domDebounceTimer = null;
                     window.__agyRealtimeDomWatcher = new MutationObserver(() => {
-                        reportCurrentSession();
+                        if (domDebounceTimer) return;
+                        domDebounceTimer = setTimeout(() => {
+                            domDebounceTimer = null;
+                            reportCurrentSession();
+                        }, 1000);
                     });
                     window.__agyRealtimeDomWatcher.observe(document.body, { childList: true, subtree: true });
                 }

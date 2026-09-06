@@ -6,6 +6,23 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
 
 ## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
 
+### [1.0.3] - 2026-09-07
+- **Loại thay đổi**: `feat`, `fix`
+- **Tiêu đề**: `feat: add smart stop button, camera capture, accessory coding bar, and fix residual script issues`
+- **Chi tiết thay đổi**:
+  - **Nút Dừng Khẩn Cấp Thông Minh (Smart Stop Button)**: Khi Agent đang thực thi (`isWorking = true`), nút góc phải chuyển thành nút Stop màu đỏ gọi `window.__agyTriggerStop()` để ngắt lệnh lập tức từ thanh TopStatusBar.
+  - **Chụp ảnh trực tiếp từ Camera**: Tích hợp nút Camera 1-chạm nén ảnh tối ưu và đính kèm trực tiếp vào chat.
+  - **Thanh Phím tắt Lập trình Nhanh (Accessory Coding Bar)**: Bổ sung thanh công cụ phím tắt cuộn ngang cho điện thoại gồm ký tự code, slash `/`, mention `@`, ngoặc lập trình, xuống dòng và xóa trắng ô gõ.
+  - **Khắc phục lỗi tồn đọng**:
+    - Khai báo biến `lastReportedHref` trong `AgySessionScript.kt` tránh lỗi runtime ReferenceError.
+    - Loại bỏ fallback ID phiên tĩnh hardcoded trong `AgyWebView.kt`.
+    - Gỡ bỏ interval 600ms quét DOM tự động gây tranh chấp tương tác trong `AgyActionScript.kt`.
+    - Thêm fallback kết luận mặc định cho thông báo Agent hoàn thành.
+    - Chuyển `windowSoftInputMode="adjustResize"` vào đúng cấp activity trong `AndroidManifest.xml`.
+  - **Bản build**: Xuất bản `D:\apk\agy-remote-debug 1.0.3.apk`.
+
+---
+
 ### [1.0.2] - 2026-09-06
 - **Commit**: `2c44db4`
 - **Loại thay đổi**: `fix`, `feat`

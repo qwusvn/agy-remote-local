@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.agyremote"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
     }
 
     buildTypes {
@@ -123,7 +123,7 @@ val copyApkTask = tasks.register("copyApkToTargetDir") {
                 duplicate.delete()
             }
 
-            val dest = File(targetDir, "agy-remote-debug 1.0.2.apk")
+            val dest = File(targetDir, "agy-remote-debug 1.0.3.apk")
             debugApk.copyTo(dest, overwrite = true)
         }
     }

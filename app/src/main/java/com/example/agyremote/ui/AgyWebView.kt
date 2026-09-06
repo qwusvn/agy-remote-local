@@ -59,7 +59,7 @@ fun executeAgyNav(webView: WebView?, action: String) {
                 if (!p || !p.startsWith('/c/')) {
                     const first = document.querySelector('a[href^="/c/"]');
                     if (first) p = first.getAttribute('href');
-                    else p = '/c/f1b40f64-6ccf-4007-834e-444183cd4157';
+                    else p = '/';
                 }
                 return p;
             }
