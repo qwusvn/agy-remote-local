@@ -24,11 +24,9 @@ object AgySessionScript {
                             'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
                             'button[aria-label*="Cancel (" i], ' +
                             'button[aria-label*="Cancel(" i], ' +
+                            'button[aria-label="Cancel prompt" i], ' +
                             'button[aria-label="Stop generation" i], ' +
-                            'main button[aria-label*="Stop" i], ' +
-                            '[role="main"] button[aria-label*="Stop" i], ' +
-                            'button[data-testid="subagent-stop"], ' +
-                            'button .bg-red-500, .bg-red-500'
+                            'button[data-testid="subagent-stop"]'
                         );
                         if (cancelBtn) {
                             const btn = cancelBtn.tagName === 'BUTTON' ? cancelBtn : cancelBtn.closest('button');
@@ -47,29 +45,26 @@ object AgySessionScript {
                     return false;
                 };
 
-                // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn Antigravity
+                // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn xác Antigravity
                 function isAgentActive() {
                     try {
-                        // A. Nút Cancel trong ô nhập prompt (sFb component: data-tooltip-id="input-send-button-cancel-tooltip", chứa div.bg-red-500)
+                        // A. Nút Cancel trong ô nhập prompt (khi agent đang suy nghĩ / trả lời)
                         const cancelPromptBtn = document.querySelector(
                             'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
                             'button[aria-label*="Cancel (" i], ' +
                             'button[aria-label*="Cancel(" i], ' +
-                            'div[data-testid="send-button-pending"], ' +
-                            'button .bg-red-500, .bg-red-500'
+                            'button[aria-label="Cancel prompt" i], ' +
+                            'div[data-testid="send-button-pending"]'
                         );
                         if (cancelPromptBtn) return true;
 
-                        // B. Nút dừng Subagents, Background Tasks, hoặc Stop Execution trong danh sách
-                        const stopActionBtn = document.querySelector(
+                        // B. Nút dừng Subagent đang chạy
+                        const stopSubagentBtn = document.querySelector(
                             'button[data-testid="subagent-stop"], ' +
                             'button[aria-label*="Stop subagent" i], ' +
-                            'button[aria-label*="Cancel Task" i], ' +
-                            'button[aria-label*="Stop execution" i], ' +
-                            '[data-tooltip-id^="stop-task-"], ' +
-                            '[data-tooltip-id^="stop-subagent-"]'
+                            'button[aria-label="Stop generation" i]'
                         );
-                        if (stopActionBtn) return true;
+                        if (stopSubagentBtn) return true;
 
                         // C. Spinner trạng thái Cortex đang thực thi tác vụ
                         const statusSpinner = document.querySelector(
@@ -78,14 +73,6 @@ object AgySessionScript {
                             '.google-symbols.animate-spin'
                         );
                         if (statusSpinner) return true;
-
-                        // D. Nút Stop chung trong phần nội dung chính
-                        const generalStop = document.querySelector(
-                            'main button[aria-label*="Stop" i], ' +
-                            '[role="main"] button[aria-label*="Stop" i], ' +
-                            'button[aria-label="Stop generation" i]'
-                        );
-                        if (generalStop) return true;
 
                         return false;
                     } catch(e) {
@@ -153,9 +140,9 @@ object AgySessionScript {
                         } else {
                             if (lastWorkingState) {
                                 absentCount++;
-                                // Cần duy trì trạng thái vắng mặt liên tục ít nhất 20 chu kỳ (~6 giây)
-                                // để đảm bảo Agent đã kết thúc hoàn toàn thay vì chỉ tạm dừng giữa các bước gọi tool
-                                if (absentCount >= 20) {
+                                // 3 chu kỳ liên tiếp không thấy dấu hiệu làm việc (3 * 400ms = 1.2s)
+                                // đảm bảo Agent đã kết thúc hoàn toàn mà không bị chờ lâu
+                                if (absentCount >= 3) {
                                     lastWorkingState = false;
                                     absentCount = 0;
 
@@ -182,7 +169,7 @@ object AgySessionScript {
                 }
 
                 if (!window.__agyMonitorInterval) {
-                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 800);
+                    window.__agyMonitorInterval = setInterval(checkAgentStatus, 400);
                 }
 
                 // 2. Theo dõi active conversation path

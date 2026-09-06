@@ -1,5 +1,7 @@
 import java.io.File
 
+val currentVersionName = "1.0.4"
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -13,8 +15,8 @@ android {
         applicationId = "com.example.agyremote"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = currentVersionName
     }
 
     buildTypes {
@@ -123,7 +125,7 @@ val copyApkTask = tasks.register("copyApkToTargetDir") {
                 duplicate.delete()
             }
 
-            val dest = File(targetDir, "agy-remote-debug 1.0.3.apk")
+            val dest = File(targetDir, "agy-remote-debug $currentVersionName.apk")
             debugApk.copyTo(dest, overwrite = true)
         }
     }

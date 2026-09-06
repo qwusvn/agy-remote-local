@@ -165,11 +165,11 @@ object AgyInputScript {
 
                 let lastSendTimestamp = 0;
 
-                // Hàm kích hoạt gửi tin nhắn chuẩn xác cho Antigravity (dùng được cả từ nút bấm web, phím Enter, hoặc thanh TopStatusBar)
+                // Hàm kích hoạt gửi tin nhắn chuẩn xác cho Antigravity (gọi từ phím Enter hoặc nút TopStatusBar)
                 window.__agyTriggerSend = function() {
                     try {
                         const now = Date.now();
-                        if (now - lastSendTimestamp < 400) {
+                        if (now - lastSendTimestamp < 500) {
                             return true;
                         }
                         lastSendTimestamp = now;
@@ -180,23 +180,17 @@ object AgyInputScript {
                             'button[aria-label*="Send message" i], ' +
                             'button[aria-label*="Send" i]'
                         );
-                        if (sendBtn) {
-                            if (sendBtn.disabled) {
-                                sendBtn.removeAttribute('disabled');
-                                sendBtn.disabled = false;
-                            }
-                            // 1. Kích hoạt trực tiếp React onClick handler nếu có trên Fiber/Props
-                            const propKey = Object.keys(sendBtn).find(k => k.startsWith('__reactProps'));
-                            if (propKey && sendBtn[propKey] && typeof sendBtn[propKey].onClick === 'function') {
-                                try {
-                                    sendBtn[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} });
-                                    return true;
-                                } catch(e) {}
-                            }
-                            // 2. Fallback: Native click
-                            sendBtn.click();
+                        if (sendBtn && !sendBtn.disabled) {
+                            setTimeout(() => {
+                                try { sendBtn.click(); } catch(e) {}
+                            }, 10);
                             return true;
                         }
+                    } catch(err) {
+                        console.error('[AGY] __agyTriggerSend error:', err);
+                    }
+                    return false;
+                };
                 // Hàm chèn text vào editor hiện tại (dùng cho Accessory Coding Bar)
                 window.__agyInsertText = function(text) {
                     try {
@@ -249,6 +243,7 @@ object AgyInputScript {
 
                     // 1. Bắt sự kiện 'beforeinput' (bàn phím ảo Android / Gboard / IME)
                     doc.addEventListener('beforeinput', function(e) {
+                        if (e.isComposing) return;
                         const isNewline = e.inputType === 'insertLineBreak' || 
                                           e.inputType === 'insertParagraph' ||
                                           (e.inputType === 'insertText' && (e.data === '\n' || e.data === '\r\n'));
@@ -265,6 +260,7 @@ object AgyInputScript {
 
                     // 2. Bắt sự kiện 'keydown' (bàn phím ảo Android / phím Enter / keyevent 66 ADB)
                     doc.addEventListener('keydown', function(e) {
+                        if (e.isComposing || e.keyCode === 229) return;
                         if (e.key !== 'Enter' && e.keyCode !== 13) return;
 
                         if (Date.now() - lastHandledTimestamp < 300) {
@@ -296,22 +292,6 @@ object AgyInputScript {
                         }
                     }, true);
 
-                    // 3. Đảm bảo chạm trực tiếp trên màn hình cảm ứng di động vào nút Send luôn phản hồi tức thì
-                    function handleSendTap(e) {
-                        const target = e.target;
-                        if (!target) return;
-                        const sendBtn = target.closest('button[data-testid="send-button"], button[data-tooltip-id="input-send-button-send-tooltip"], button[aria-label*="Send" i]');
-                        if (sendBtn) {
-                            if (e.type === 'pointerdown') {
-                                e.preventDefault();
-                            }
-                            window.__agyTriggerSend();
-                        }
-                    }
-
-                    doc.addEventListener('pointerdown', handleSendTap, true);
-                    doc.addEventListener('touchend', handleSendTap, true);
-
                     // 3. Bắt sự kiện chạm / click vào mục "Media" trong menu Add Context (+)
                     // Tránh lỗi Chromium: "File chooser dialog can only be shown with a user activation"
                     doc.addEventListener('click', function(e) {
@@ -338,23 +318,6 @@ object AgyInputScript {
 
                 // Gắn vào document chính
                 attachListeners(document);
-
-                // Quét và gắn vào các sub-iframes nếu có
-                function scanIframes() {
-                    try {
-                        const iframes = document.querySelectorAll('iframe');
-                        iframes.forEach(iframe => {
-                            try {
-                                const subDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                                if (subDoc) attachListeners(subDoc);
-                            } catch(err) {}
-                        });
-                    } catch(e) {}
-                }
-
-                scanIframes();
-                const observer = new MutationObserver(() => scanIframes());
-                observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
 
                 console.log('[AGY] Smart Input Formatter (Lexical & Textarea Auto-Bullet) loaded successfully.');
             } catch(e) {

@@ -6,6 +6,22 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
 
 ## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
 
+### [1.0.4] - 2026-09-07
+- **Loại thay đổi**: `fix`
+- **Tiêu đề**: `fix: eliminate typing freeze and lingering working state`
+- **Chi tiết thay đổi**:
+  - **Khắc phục lỗi treo bàn phím / đơ ô nhập khi gõ lệnh ("bị treo")**:
+    - Gỡ bỏ `pointerdown` và `touchend` interceptors với `e.preventDefault()`, tránh gây xung đột khóa trạng thái bàn phím ảo IME của Android và Chromium gesture detector.
+    - Gỡ bỏ `MutationObserver` không debounce quét iframe liên tục trên toàn bộ DOM mỗi khi gõ ký tự hoặc stream token.
+    - Thêm cơ chế kiểm tra an toàn `e.isComposing` và `e.keyCode === 229` để bảo toàn bộ gõ tiếng Việt Telex / Gboard không bị ngắt quãng.
+    - Tinh chỉnh `window.__agyTriggerSend()` kích hoạt qua `setTimeout(click, 10)` đảm bảo an toàn cho React 18 concurrent reconciliation.
+  - **Khắc phục lỗi trạng thái Working kéo dài ("hiện working rất lâu")**:
+    - Loại bỏ bộ lọc selector `.bg-red-500` và `[data-tooltip-id^="stop-task-"]` trong `isAgentActive()`, tránh nhận diện nhầm các huy hiệu lỗi MCP, nút cảnh báo hoặc task cũ trong lịch sử.
+    - Giảm ngưỡng phát hiện vắng mặt `absentCount` từ 20 chu kỳ (16 giây) xuống còn 3 chu kỳ ở tần số quét 400ms (1.2 giây), giúp chuyển trạng thái về Idle tức thì sau khi Agent kết thúc.
+  - **Bản build**: Xuất bản `D:\apk\agy-remote-debug 1.0.4.apk` theo Quy tắc 7.
+
+---
+
 ### [1.0.3] - 2026-09-07
 - **Loại thay đổi**: `feat`, `fix`
 - **Tiêu đề**: `feat: add smart stop button, camera capture, accessory coding bar, and fix residual script issues`
