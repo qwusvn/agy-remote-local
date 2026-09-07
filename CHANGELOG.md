@@ -6,6 +6,24 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
 
 ## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
 
+### [1.0.5] - 2026-09-08
+- **Loại thay đổi**: `fix`
+- **Tiêu đề**: `fix: eliminate input freeze and tab state desync across multiple conversations`
+- **Chi tiết thay đổi**:
+  - **Khắc phục triệt để lỗi đơ/treo bàn phím khi gõ lệnh ("mỗi lần gõ lệnh thì bị treo, nhất là khi sử dụng nhiều hội thoại")**:
+    - Loại bỏ sự kiện `window.dispatchEvent(new Event('focus'))` trong `DisposableEffect` của `MainScreen.kt`. Sự kiện này trước đó bị bắn liên tục mỗi khi có cập nhật ngầm từ các hội thoại khác, làm WebView giật tiêu điểm (focus/blur cycle) và gây deadlock bộ gõ IME của Android.
+    - Dọn dẹp toàn bộ các capture-phase event listener trên input/keydown trong `AgyInputScript.kt`, đảm bảo trình soạn thảo Lexical và bộ gõ tiếng Việt Telex hoạt động 100% tự nhiên mà không bị can thiệp.
+  - **Khắc phục lỗi trạng thái Working treo vĩnh viễn ("hiện working rất lâu") khi mở nhiều tab**:
+    - Giới hạn phạm vi kiểm tra `isAgentActive()` trong `AgySessionScript.kt` chỉ chạy trên các đường dẫn cuộc trò chuyện thực tế (`/c/...`), tránh báo nhầm trạng thái đang làm việc trên trang Danh sách dự án (`/`) hoặc Lịch sử (`/history`).
+    - Bỏ selector spinner chung (`.animate-spin`) trong sidebar để tránh nhận diện nhầm tiến trình của các phiên khác trong danh sách bên trái.
+    - Cung cấp `path` phiên làm việc từ JavaScript sang Android bridge `reportWorkingStatus(isWorking, path)` và bổ sung `updateTabWorkingByPath(path, isWorking)` trong `MainViewModel`.
+    - Tránh khớp chéo tiêu đề chung (`Phiên làm việc`, `Dự án / Phiên`, `Phiên đang mở`) khi nhận broadcast từ WebSocket background service.
+    - Reset trạng thái làm việc ngay khi chuyển tab (`agySpaNavigate`), đồng bộ tức thời trạng thái Idle/Working của từng phiên riêng biệt.
+  - **Kiểm thử**: Viết mới test suite `MainViewModelTest.kt` kiểm tra cô lập đa tab, toàn bộ Unit Tests PASS 100%.
+  - **Bản build**: Xuất bản `D:\apk\agy-remote-debug 1.0.5.apk` theo Quy tắc 7.
+
+---
+
 ### [1.0.4] - 2026-09-07
 - **Loại thay đổi**: `fix`
 - **Tiêu đề**: `fix: eliminate typing freeze and lingering working state`

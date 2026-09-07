@@ -164,15 +164,57 @@ class MainViewModel : ViewModel() {
     }
 
     /**
+     * Cập nhật trạng thái làm việc (isWorking) theo đường dẫn (path) của phiên.
+     * Đảm bảo chỉ tab khớp với phiên đang báo trạng thái mới bị ảnh hưởng,
+     * ngăn chặn tuyệt đối lỗi treo trạng thái working chéo giữa nhiều hội thoại.
+     */
+    fun updateTabWorkingByPath(path: String, isWorking: Boolean) {
+        val activeId = _activeTabId.value
+        val cleanPath = path.trim()
+        val convoId = if (cleanPath.startsWith("/c/")) {
+            cleanPath.removePrefix("/c/").split("?")[0].split("#")[0]
+        } else {
+            ""
+        }
+
+        _tabs.value = _tabs.value.map { tab ->
+            val matchesPath = if (convoId.isNotBlank()) {
+                tab.url.contains(convoId)
+            } else if (cleanPath.isNotBlank() && cleanPath != "/") {
+                tab.url.endsWith(cleanPath) || tab.url.contains(cleanPath)
+            } else {
+                false
+            }
+            val isCurrentActive = tab.id == activeId
+
+            if (matchesPath || (cleanPath.isBlank() && isCurrentActive) || (cleanPath == "/" && isCurrentActive)) {
+                tab.copy(isWorking = isWorking)
+            } else {
+                tab
+            }
+        }
+    }
+
+    /**
      * Xử lý sự kiện cập nhật phiên Realtime ngầm từ Service
      */
     fun handleSessionUpdate(convoId: String, title: String, isWorking: Boolean) {
         val activeId = _activeTabId.value
+        val genericTitles = setOf(
+            "Phiên làm việc", "Dự án / Phiên", "Phiên đang mở", 
+            "Lịch sử", "Phiên mới", "Phiên thông báo", 
+            "Cuộc trò chuyện Antigravity", "Antigravity", ""
+        )
+        val isSpecificTitle = title.isNotBlank() && title !in genericTitles
+
         _tabs.value = _tabs.value.map { tab ->
-            if ((convoId.isNotBlank() && tab.url.contains(convoId)) || tab.title.equals(title, ignoreCase = true)) {
+            val matchesConvo = convoId.isNotBlank() && tab.url.contains(convoId)
+            val matchesTitle = isSpecificTitle && tab.title.equals(title, ignoreCase = true)
+            if (matchesConvo || matchesTitle) {
                 val isCurrentActive = tab.id == activeId
+                val newTitle = if (isSpecificTitle) title else tab.title
                 tab.copy(
-                    title = title,
+                    title = newTitle,
                     isWorking = isWorking,
                     hasUnread = if (!isCurrentActive && !isWorking) true else tab.hasUnread
                 )

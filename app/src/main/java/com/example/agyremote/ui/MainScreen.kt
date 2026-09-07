@@ -161,12 +161,6 @@ fun MainScreen(
                 val convoId = intent.getStringExtra("convoId") ?: ""
 
                 viewModel.handleSessionUpdate(convoId, title, isWorking)
-
-                // Đánh thức rendering engine của WebView cập nhật realtime ngay lập tức
-                webViewInstance?.evaluateJavascript(
-                    "try { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('visibilitychange')); } catch(e) {}",
-                    null
-                )
             }
         }
         val filter = IntentFilter("com.example.agyremote.SESSION_UPDATE")
@@ -235,8 +229,8 @@ fun MainScreen(
     }
 
     // Xử lý sự kiện thay đổi trạng thái Working từ WebView
-    fun handleWorkingStatusChanged(isWorking: Boolean) {
-        viewModel.updateActiveTabWorking(isWorking)
+    fun handleWorkingStatusChanged(isWorking: Boolean, path: String = "") {
+        viewModel.updateTabWorkingByPath(path, isWorking)
         // Chỉ cập nhật cờ UI trạng thái tab, KHÔNG bắn thông báo tại đây để tránh spam giữa các bước tool call.
         // Thông báo kết luận cuối cùng được kích hoạt bởi onTaskDone sau 3s debounce ổn định.
         previousWorkingState = isWorking
@@ -651,9 +645,8 @@ fun MainScreen(
                     onTitleReceived = { title ->
                         viewModel.addLog("TITLE", "Trang: $title", false)
                     },
-                    onWorkingStatusChanged = { isWorking ->
-                        viewModel.updateActiveTabWorking(isWorking)
-                        handleWorkingStatusChanged(isWorking)
+                    onWorkingStatusChanged = { isWorking, path ->
+                        handleWorkingStatusChanged(isWorking, path)
                     },
                     onTaskDone = { taskTitle, conclusion ->
                         notifyTaskCompleted(taskTitle.ifBlank { "Cuộc trò chuyện" }, conclusion)

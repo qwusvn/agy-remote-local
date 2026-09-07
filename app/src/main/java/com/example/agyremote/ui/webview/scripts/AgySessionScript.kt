@@ -48,31 +48,24 @@ object AgySessionScript {
                 // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn xác Antigravity
                 function isAgentActive() {
                     try {
-                        // A. Nút Cancel trong ô nhập prompt (khi agent đang suy nghĩ / trả lời)
+                        const path = window.location.pathname;
+                        // Nếu không phải trang cuộc trò chuyện (/c/...), tuyệt đối không bao giờ báo isWorking
+                        if (!path.startsWith('/c/')) {
+                            return false;
+                        }
+
+                        // Tìm nút Cancel trong ô nhập prompt ở đáy màn hình cuộc trò chuyện hiện tại
+                        // Khi Agent đang suy nghĩ / sinh câu trả lời trong phiên này, nút Send biến thành nút Cancel
                         const cancelPromptBtn = document.querySelector(
                             'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
+                            'button[aria-label="Cancel prompt" i], ' +
                             'button[aria-label*="Cancel (" i], ' +
                             'button[aria-label*="Cancel(" i], ' +
-                            'button[aria-label="Cancel prompt" i], ' +
+                            'button[aria-label="Stop generation" i], ' +
+                            'button[data-testid="subagent-stop"], ' +
                             'div[data-testid="send-button-pending"]'
                         );
                         if (cancelPromptBtn) return true;
-
-                        // B. Nút dừng Subagent đang chạy
-                        const stopSubagentBtn = document.querySelector(
-                            'button[data-testid="subagent-stop"], ' +
-                            'button[aria-label*="Stop subagent" i], ' +
-                            'button[aria-label="Stop generation" i]'
-                        );
-                        if (stopSubagentBtn) return true;
-
-                        // C. Spinner trạng thái Cortex đang thực thi tác vụ
-                        const statusSpinner = document.querySelector(
-                            '[data-testid="status-loading-spinner"], ' +
-                            'svg[name="progress_activity"].animate-spin, ' +
-                            '.google-symbols.animate-spin'
-                        );
-                        if (statusSpinner) return true;
 
                         return false;
                     } catch(e) {
@@ -127,22 +120,23 @@ object AgySessionScript {
 
                 function checkAgentStatus() {
                     try {
+                        const path = window.location.pathname;
                         const isWorking = isAgentActive();
 
                         if (isWorking) {
                             absentCount = 0;
-                            if (!lastWorkingState) {
+                            if (lastWorkingState !== true) {
                                 lastWorkingState = true;
                                 if (window.AgyAndroidBridge && window.AgyAndroidBridge.reportWorkingStatus) {
-                                    window.AgyAndroidBridge.reportWorkingStatus(true);
+                                    window.AgyAndroidBridge.reportWorkingStatus(true, path);
                                 }
                             }
                         } else {
-                            if (lastWorkingState) {
+                            if (lastWorkingState !== false) {
                                 absentCount++;
-                                // 3 chu kỳ liên tiếp không thấy dấu hiệu làm việc (3 * 400ms = 1.2s)
-                                // đảm bảo Agent đã kết thúc hoàn toàn mà không bị chờ lâu
-                                if (absentCount >= 3) {
+                                // 2 chu kỳ không thấy dấu hiệu làm việc (2 * 400ms = 800ms)
+                                // hoặc vừa chuyển trang mới (lastWorkingState === null)
+                                if (absentCount >= 2 || lastWorkingState === null) {
                                     lastWorkingState = false;
                                     absentCount = 0;
 
@@ -151,9 +145,9 @@ object AgySessionScript {
 
                                     if (window.AgyAndroidBridge) {
                                         if (window.AgyAndroidBridge.reportWorkingStatus) {
-                                            window.AgyAndroidBridge.reportWorkingStatus(false);
+                                            window.AgyAndroidBridge.reportWorkingStatus(false, path);
                                         }
-                                        if (window.AgyAndroidBridge.notifyTaskDone) {
+                                        if (window.AgyAndroidBridge.notifyTaskDone && path.startsWith('/c/')) {
                                             window.AgyAndroidBridge.notifyTaskDone(
                                                 lastReportedTitle || 'Cuộc trò chuyện Antigravity',
                                                 finalMsg
@@ -325,24 +319,28 @@ object AgySessionScript {
                             if (hasAux && auxBtn) auxBtn.click();
                         } catch(e) {}
 
+                        // Reset trạng thái làm việc để đánh giá chính xác phiên vừa chuyển tới
+                        lastWorkingState = null;
+                        absentCount = 0;
+                        setTimeout(() => {
+                            checkAgentStatus();
+                            reportCurrentSession();
+                        }, 100);
+
                         const r = window.__TSR_ROUTER__;
                         if (r && typeof r.navigate === 'function') {
                             if (targetPath.startsWith('/c/')) {
                                 const cid = targetPath.replace('/c/', '').split('?')[0].split('#')[0];
                                 r.navigate({ to: '/c/${'$'}cascadeId', params: { cascadeId: cid } });
-                                setTimeout(reportCurrentSession, 80);
                                 return true;
                             } else if (targetPath === '/' || targetPath === '') {
                                 r.navigate({ to: '/' });
-                                setTimeout(reportCurrentSession, 80);
                                 return true;
                             } else if (targetPath.startsWith('/history')) {
                                 r.navigate({ to: '/history' });
-                                setTimeout(reportCurrentSession, 80);
                                 return true;
                             } else {
                                 r.navigate({ to: targetPath });
-                                setTimeout(reportCurrentSession, 80);
                                 return true;
                             }
                         }

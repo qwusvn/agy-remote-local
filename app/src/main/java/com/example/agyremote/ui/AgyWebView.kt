@@ -228,7 +228,7 @@ fun injectImageIntoWebView(
 }
 
 class AgyJsBridge(
-    private val onStatus: (Boolean) -> Unit,
+    private val onStatus: (Boolean, String) -> Unit,
     private val onSwipeLeft: () -> Unit,
     private val onSwipeRight: () -> Unit,
     private val onNavigate: (String) -> Unit,
@@ -238,7 +238,12 @@ class AgyJsBridge(
 ) {
     @android.webkit.JavascriptInterface
     fun reportWorkingStatus(isWorking: Boolean) {
-        onStatus(isWorking)
+        onStatus(isWorking, "")
+    }
+
+    @android.webkit.JavascriptInterface
+    fun reportWorkingStatus(isWorking: Boolean, path: String) {
+        onStatus(isWorking, path)
     }
 
     @android.webkit.JavascriptInterface
@@ -287,7 +292,7 @@ fun AgyWebView(
     onPageStarted: (String) -> Unit = {},
     onPageFinished: (String) -> Unit = {},
     onTitleReceived: (String) -> Unit = {},
-    onWorkingStatusChanged: (Boolean) -> Unit = {},
+    onWorkingStatusChanged: (Boolean, String) -> Unit = { _, _ -> },
     onTaskDone: (String, String) -> Unit = { _, _ -> },
     onNavigationChanged: (String) -> Unit = {},
     onSwipeLeftDetected: () -> Unit = {},
@@ -316,9 +321,9 @@ fun AgyWebView(
             // Cầu nối Javascript Interface
             addJavascriptInterface(
                 AgyJsBridge(
-                    onStatus = { isWorking ->
+                    onStatus = { isWorking, path ->
                         post {
-                            onWorkingStatusChanged(isWorking)
+                            onWorkingStatusChanged(isWorking, path)
                         }
                     },
                     onTaskDone = { taskTitle, conclusion ->
