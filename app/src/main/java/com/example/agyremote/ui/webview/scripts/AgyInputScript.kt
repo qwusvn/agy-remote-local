@@ -23,7 +23,7 @@ object AgyInputScript {
                 window.__agyTriggerSend = function() {
                     try {
                         const now = Date.now();
-                        if (now - lastSendTimestamp < 400) {
+                        if (now - lastSendTimestamp < 250) {
                             return true;
                         }
                         lastSendTimestamp = now;
@@ -32,9 +32,14 @@ object AgyInputScript {
                             'button[data-testid="send-button"], ' +
                             'button[data-tooltip-id="input-send-button-send-tooltip"], ' +
                             'button[aria-label*="Send message" i], ' +
-                            'button[aria-label*="Send" i]'
+                            'button[aria-label*="Send" i], ' +
+                            'button[aria-label*="Gửi" i]'
                         );
                         if (sendBtn && !sendBtn.disabled) {
+                            const propKey = Object.keys(sendBtn).find(k => k.startsWith('__reactProps'));
+                            if (propKey && sendBtn[propKey] && typeof sendBtn[propKey].onClick === 'function') {
+                                try { sendBtn[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} }); } catch(e) {}
+                            }
                             sendBtn.click();
                             return true;
                         }

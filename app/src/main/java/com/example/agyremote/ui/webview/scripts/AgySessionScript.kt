@@ -26,6 +26,8 @@ object AgySessionScript {
                             'button[aria-label*="Cancel(" i], ' +
                             'button[aria-label="Cancel prompt" i], ' +
                             'button[aria-label="Stop generation" i], ' +
+                            'button[aria-label*="Dừng" i], ' +
+                            'button[aria-label*="Hủy" i], ' +
                             'button[data-testid="subagent-stop"]'
                         );
                         if (cancelBtn) {
@@ -62,6 +64,8 @@ object AgySessionScript {
                             'button[aria-label*="Cancel (" i], ' +
                             'button[aria-label*="Cancel(" i], ' +
                             'button[aria-label="Stop generation" i], ' +
+                            'button[aria-label*="Dừng" i], ' +
+                            'button[aria-label*="Hủy" i], ' +
                             'button[data-testid="subagent-stop"], ' +
                             'div[data-testid="send-button-pending"]'
                         );
@@ -292,6 +296,23 @@ object AgySessionScript {
                     window.__agyRealtimeDomWatcher.observe(document.body, { childList: true, subtree: true });
                 }
 
+                // 4.1. Tự động đóng sidebar drawer khi chọn một cuộc trò chuyện từ danh sách
+                if (!window.__agyLinkClickListener) {
+                    window.__agyLinkClickListener = true;
+                    document.addEventListener('click', function(e) {
+                        const link = e.target && e.target.closest && e.target.closest('a[href*="/c/"]');
+                        if (link) {
+                            setTimeout(() => {
+                                const openSheet = document.querySelector('div[role="dialog"][data-state="open"]');
+                                if (openSheet) {
+                                    const closeBtn = document.querySelector('button[aria-label*="menu" i][data-state="open"], button[data-state="open"], div[data-state="open"].fixed.inset-0');
+                                    if (closeBtn) closeBtn.click();
+                                }
+                            }, 60);
+                        }
+                    }, true);
+                }
+
                 // 5. Hàm điều hướng SPA tức thì (0ms không reload trang)
                 window.agySpaNavigate = function(targetPathOrUrl) {
                     try {
@@ -317,6 +338,15 @@ object AgySessionScript {
                             const hasAux = document.querySelector('[data-testid="changed-file-row"]') || 
                                            document.querySelector('[data-testid="aux-panel-plus-dropdown-trigger"]');
                             if (hasAux && auxBtn) auxBtn.click();
+                        } catch(e) {}
+
+                        // Đóng mobile drawer / sidebar nếu đang mở
+                        try {
+                            const openSheet = document.querySelector('div[role="dialog"][data-state="open"]');
+                            if (openSheet) {
+                                const closeBtn = document.querySelector('button[aria-label*="menu" i][data-state="open"], button[data-state="open"], div[data-state="open"].fixed.inset-0');
+                                if (closeBtn) closeBtn.click();
+                            }
                         } catch(e) {}
 
                         // Reset trạng thái làm việc để đánh giá chính xác phiên vừa chuyển tới

@@ -6,6 +6,25 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
 
 ## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
 
+### [1.0.6] - 2026-09-08
+- **Loại thay đổi**: `fix`
+- **Tiêu đề**: `fix: resolve consecutive message stalls and non-blocking event loop in LAN bridge`
+- **Chi tiết thay đổi**:
+  - **Khắc phục nghẽn Event Loop trên Node.js LAN Bridge (`agy_lan_bridge.js`, `bridge/proxy_handler.js`, `bridge/session_watcher.js`)**:
+    - Chuyển đổi cơ chế dò Language Server PC từ `execSync` (gây nghẽn 1.5 - 2.5s mỗi 3 giây) sang `child_process.exec` bất đồng bộ hoàn toàn cùng HTTP health-check nhẹ 10 giây/lần.
+    - Chuyển đổi toàn bộ quét ổ đĩa `brainDir` trong `session_watcher.js` sang `fs.promises` bất đồng bộ hoàn toàn với bộ nhớ đệm tiêu đề phiên, loại bỏ nghẽn I/O 250ms trên đĩa.
+    - Cấu hình persistent `http.Agent` (`keepAlive: true`, `maxSockets: 100`) và kích hoạt `setNoDelay(true)` trên TCP socket cho cả hai đầu proxy, loại bỏ độ trễ Nagle's algorithm.
+    - Bổ sung `res.flushHeaders()` và chuyển tiếp trailers gRPC-web (`res.addTrailers(proxyRes.trailers)`), giúp gRPC-web stream kết thúc đúng chuẩn mà không bị treo phiên.
+    - Tối ưu bộ dò IP mạng LAN lọc các địa chỉ link-local (169.254.*), ưu tiên mạng nội bộ 192.168.*.
+  - **Tối ưu trải nghiệm Android Client (`AgyInputScript.kt`, `AgySessionScript.kt`)**:
+    - Hỗ trợ đầy đủ nhãn nút tiếng Việt (`Gửi`, `Dừng`, `Hủy`) và kích hoạt React Synthetic `onClick`.
+    - Tự động đóng Radix UI Sheet Dialog / Drawer khi điều hướng cuộc trò chuyện, loại bỏ tình trạng overlay che khuất màn hình.
+  - **Kiểm thử & Bản build**:
+    - Unit tests chạy và PASS 100%.
+    - Xuất bản duy nhất `D:\apk\agy-remote-debug 1.0.6.apk` theo Quy tắc 7.
+
+---
+
 ### [1.0.5] - 2026-09-08
 - **Loại thay đổi**: `fix`
 - **Tiêu đề**: `fix: eliminate input freeze and tab state desync across multiple conversations`

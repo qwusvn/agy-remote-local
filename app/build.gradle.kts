@@ -1,6 +1,6 @@
 import java.io.File
 
-val currentVersionName = "1.0.5"
+val currentVersionName = "1.0.6"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -15,7 +15,7 @@ android {
         applicationId = "com.example.agyremote"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
+        versionCode = 7
         versionName = currentVersionName
     }
 

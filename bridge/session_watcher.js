@@ -1,20 +1,23 @@
 const fs = require('fs');
+const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const wsHub = require('./ws_hub');
 
 /**
- * Realtime Session Watcher v7.0:
+ * Realtime Session Watcher v7.1 (Asynchronous & Non-Blocking):
  * Giám sát thư mục brain của Antigravity để phát hiện khi Agent hoàn thành câu trả lời.
- * - Chỉ quét các phiên hoạt động gần nhất (trong vòng 2 phút).
- * - Khởi tạo ghi nhận toàn bộ bước cũ để KHÔNG BAO GIỜ bắn thông báo lịch sử cũ.
- * - Lọc triệt để 100%: Chỉ bắn sự kiện khi là câu trả lời kết luận thực sự của Agent (bỏ qua tool_calls, GENERIC, USER_INPUT, log lệnh).
+ * - Hoạt động hoàn toàn bất đồng bộ (fs.promises), không bao giờ block event loop của Node.js.
+ * - Caching title và bước cũ để loại bỏ hoàn toàn đĩa I/O thừa.
+ * - Lọc triệt để 100%: Chỉ bắn sự kiện khi là câu trả lời kết luận thực sự của Agent.
  */
 class SessionWatcher {
     constructor() {
         this.brainDir = path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
         this.knownDoneSteps = new Set();
+        this.titleCache = new Map();
         this.watcherInterval = null;
+        this.isScanning = false;
     }
 
     start(port = 4400) {
@@ -24,12 +27,14 @@ class SessionWatcher {
         }
 
         console.log(`[WATCHER] 👁️ Khởi tạo Realtime Session Watcher tại: ${this.brainDir}`);
-        // Quét khởi tạo để đánh dấu toàn bộ các bước cũ, tuyệt đối không bắn thông báo lịch sử
         this.initKnownSteps();
 
+        // Quét bất đồng bộ mỗi 1500ms, hoàn toàn không block luồng xử lý tin nhắn
         this.watcherInterval = setInterval(() => {
-            this.scanSessions(port);
-        }, 1000);
+            if (!this.isScanning) {
+                this.scanSessionsAsync(port).catch(() => {});
+            }
+        }, 1500);
     }
 
     stop() {
@@ -73,27 +78,37 @@ class SessionWatcher {
         }
     }
 
-    scanSessions(port) {
+    async scanSessionsAsync(port) {
+        this.isScanning = true;
         try {
-            const entries = fs.readdirSync(this.brainDir, { withFileTypes: true });
+            const entries = await fsp.readdir(this.brainDir, { withFileTypes: true });
             const now = Date.now();
 
             for (const entry of entries) {
                 if (!entry.isDirectory()) continue;
                 const convoId = entry.name;
                 const transcriptPath = path.join(this.brainDir, convoId, '.system_generated', 'logs', 'transcript.jsonl');
-                if (!fs.existsSync(transcriptPath)) continue;
 
-                const stat = fs.statSync(transcriptPath);
+                let stat;
+                try {
+                    stat = await fsp.stat(transcriptPath);
+                } catch (e) {
+                    continue; // File không tồn tại
+                }
+
                 // Bỏ qua các file không được cập nhật trong 2 phút gần nhất
                 if (now - stat.mtimeMs > 120000) continue;
 
-                // Đọc 4096 bytes cuối file
+                // Đọc bất đồng bộ 4096 bytes cuối file
                 const readSize = Math.min(stat.size, 4096);
-                const buffer = Buffer.alloc(readSize);
-                const fd = fs.openSync(transcriptPath, 'r');
-                fs.readSync(fd, buffer, 0, readSize, stat.size - readSize);
-                fs.closeSync(fd);
+                let buffer = Buffer.alloc(readSize);
+                let handle;
+                try {
+                    handle = await fsp.open(transcriptPath, 'r');
+                    await handle.read(buffer, 0, readSize, stat.size - readSize);
+                } finally {
+                    if (handle) await handle.close();
+                }
 
                 const lines = buffer.toString('utf8').split('\n').filter(Boolean);
                 for (let i = lines.length - 1; i >= 0; i--) {
@@ -105,17 +120,16 @@ class SessionWatcher {
                                 break;
                             }
 
-                            // Đánh dấu ngay lập tức để không quét lại bước này
                             this.knownDoneSteps.add(stepKey);
 
-                            // BỘ LỌC CHẶN THÔNG BÁO RÁC TRIỆT ĐỂ:
+                            // BỘ LỌC CHẶN THÔNG BÁO RÁC:
                             // 1. Chỉ chấp nhận PLANNER_RESPONSE hoặc ASSISTANT
                             if (step.type !== 'PLANNER_RESPONSE' && step.type !== 'ASSISTANT') continue;
 
                             // 2. Tuyệt đối không thông báo khi Agent đang chạy tool (tool_calls)
                             if (step.tool_calls && step.tool_calls.length > 0) continue;
 
-                            // 3. Nội dung phải là chữ người đọc được, loại bỏ các mẫu log lệnh
+                            // 3. Nội dung phải là chữ người đọc được, loại bỏ các log lệnh
                             let content = (step.content || '').trim();
                             if (!content) continue;
 
@@ -135,8 +149,8 @@ class SessionWatcher {
 
                             // Làm sạch nội dung tóm tắt
                             let cleanSummary = content
-                                .replace(/```[\s\S]*?```/g, '') // Bỏ khối code
-                                .replace(/<[^>]*>/g, '')         // Bỏ thẻ xml/html
+                                .replace(/```[\s\S]*?```/g, '')
+                                .replace(/<[^>]*>/g, '')
                                 .replace(/\s+/g, ' ')
                                 .trim();
 
@@ -145,7 +159,7 @@ class SessionWatcher {
                                 cleanSummary = cleanSummary.substring(0, 137) + '...';
                             }
 
-                            const sessionTitle = this.extractSessionTitle(convoId);
+                            const sessionTitle = await this.extractSessionTitleAsync(convoId);
                             console.log(`[WATCHER] 🔔 [KẾT LUẬN HOÀN TẤT] Phiên: "${sessionTitle}" -> "${cleanSummary}"`);
 
                             wsHub.broadcast({
@@ -161,37 +175,47 @@ class SessionWatcher {
                     } catch (e) {}
                 }
             }
-        } catch (err) {}
+        } catch (err) {
+        } finally {
+            this.isScanning = false;
+        }
     }
 
-    extractSessionTitle(convoId) {
+    async extractSessionTitleAsync(convoId) {
+        if (this.titleCache.has(convoId)) {
+            return this.titleCache.get(convoId);
+        }
+
         try {
             const fullTranscript = path.join(this.brainDir, convoId, '.system_generated', 'logs', 'transcript.jsonl');
-            if (fs.existsSync(fullTranscript)) {
-                const head = fs.readFileSync(fullTranscript, { encoding: 'utf8', flag: 'r' }).split('\n').slice(0, 10);
-                for (const line of head) {
-                    if (!line) continue;
-                    const obj = JSON.parse(line);
-                    if (obj.type === 'USER_INPUT' && obj.content) {
-                        let clean = obj.content
-                            .replace(/<USER_REQUEST>/g, '')
-                            .replace(/<\/USER_REQUEST>/g, '')
-                            .replace(/<[^>]*>/g, '')
-                            .trim();
-                        if (clean.includes('\n')) {
-                            clean = clean.split('\n').find(l => l.trim().length > 0) || clean;
-                        }
-                        clean = clean.trim();
-                        if (clean) {
-                            return clean.substring(0, 32).trim() + (clean.length > 32 ? '...' : '');
-                        }
+            const data = await fsp.readFile(fullTranscript, 'utf8');
+            const head = data.split('\n').slice(0, 10);
+            for (const line of head) {
+                if (!line) continue;
+                const obj = JSON.parse(line);
+                if (obj.type === 'USER_INPUT' && obj.content) {
+                    let clean = obj.content
+                        .replace(/<USER_REQUEST>/g, '')
+                        .replace(/<\/USER_REQUEST>/g, '')
+                        .replace(/<[^>]*>/g, '')
+                        .trim();
+                    if (clean.includes('\n')) {
+                        clean = clean.split('\n').find(l => l.trim().length > 0) || clean;
+                    }
+                    clean = clean.trim();
+                    if (clean) {
+                        const title = clean.substring(0, 32).trim() + (clean.length > 32 ? '...' : '');
+                        this.titleCache.set(convoId, title);
+                        return title;
                     }
                 }
             }
         } catch (e) {}
-        return `Phiên ${convoId.substring(0, 8)}`;
+
+        const fallback = `Phiên ${convoId.substring(0, 8)}`;
+        this.titleCache.set(convoId, fallback);
+        return fallback;
     }
 }
 
 module.exports = new SessionWatcher();
-
