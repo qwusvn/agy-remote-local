@@ -14,7 +14,7 @@ const wsHub = require('./bridge/ws_hub');
 const sessionWatcher = require('./bridge/session_watcher');
 
 const LISTEN_PORT = 4400;
-let currentTargetPort = 58289;
+let currentTargetPort = 0;
 let currentCsrfToken = '';
 let isDetecting = false;
 let lastSyncSuccess = 0;

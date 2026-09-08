@@ -6,6 +6,25 @@ Tất cả các thay đổi, bản phát hành ứng dụng và điều chỉnh 
 
 ## 📱 Phiên bản Ứng dụng AGY Remote (App Releases)
 
+### [1.0.7] - 2026-09-08
+- **Loại thay đổi**: `fix`
+- **Tiêu đề**: `fix: resolve socket hang up in lan bridge and auto-dispatch queued messages`
+- **Chi tiết thay đổi**:
+  - **Khắc phục triệt để lỗi socket hang up và nghẽn hàng đợi trên LAN Bridge (`bridge/proxy_handler.js`, `agy_lan_bridge.js`)**:
+    - Thay thế custom `http.Agent` có `keepAlive: true` và `maxSockets: 100` gây cạn kiệt socket pool và tái sử dụng socket đã đóng bằng kết nối fresh loopback socket sạch, loại bỏ hoàn toàn lỗi `socket hang up` trên các lệnh gRPC-Web POST (`StreamAgentStateUpdates`, `WatchDirectory`, `SendUserCascadeMessage`).
+    - Lọc bỏ các hop-by-hop headers (`connection`, `upgrade`, `transfer-encoding`) trên luồng proxy nhằm tránh hiện tượng double-chunking framing trong Node.js.
+    - Bổ sung cơ chế dọn dẹp kết nối an toàn khi client ngắt kết nối ngang (`req.on('close')`, `res.on('close')`).
+  - **Tối ưu tự động giải phóng hàng đợi tin nhắn trên Mobile Client (`AgySessionScript.kt`, `AgyInputScript.kt`, `MainScreen.kt`)**:
+    - Bổ sung `window.__agyFlushQueue()` tự động kích hoạt gửi các tin nhắn đang chờ trong `Queued Messages` khi Agent hoàn thành câu trả lời.
+    - Mở rộng bộ nhận diện nút Cancel/Stop khẩn cấp với các selector bao gồm `button:has(svg rect)` và `button[data-tooltip-id*="cancel-tooltip"]`.
+    - Thêm fallback gửi tin nhắn qua phím Enter ảo trong `__agyTriggerSend` khi nút Send chưa mở, và làm sạch Lexical DOM trong `__agyClearInput`.
+    - Nâng cấp `onRefresh` trong `MainScreen.kt` tự động khôi phục URL thực tế khi WebView gặp lỗi `net::ERR_CONNECTION_REFUSED`.
+  - **Kiểm thử & Bản build**:
+    - Unit tests chạy và PASS 100% (`testDebugUnitTest`).
+    - Xuất bản duy nhất `D:\apk\agy-remote-debug 1.0.7.apk` theo Quy tắc 7.
+
+---
+
 ### [1.0.6] - 2026-09-08
 - **Loại thay đổi**: `fix`
 - **Tiêu đề**: `fix: resolve consecutive message stalls and non-blocking event loop in LAN bridge`

@@ -5,18 +5,9 @@ const url = require('url');
 class ProxyHandler {
     constructor() {
         this.targetHost = '127.0.0.1';
-        this.targetPort = 51896;
+        this.targetPort = 0;
         this.csrfToken = '';
         this.onConnectionError = null;
-
-        // Persistent Agent to reuse TCP sockets and avoid handshake latency
-        this.agent = new http.Agent({
-            keepAlive: true,
-            keepAliveMsecs: 15000,
-            maxSockets: 100,
-            maxFreeSockets: 20,
-            timeout: 60000
-        });
     }
 
     setTarget(host, port, csrfToken) {
@@ -30,6 +21,12 @@ class ProxyHandler {
     }
 
     handleHttpRequest(req, res) {
+        if (!this.targetPort) {
+            res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Antigravity LAN Bridge: Đang đồng bộ Language Server...');
+            return;
+        }
+
         // Intercept OAuth Callback từ Mobile
         if (req.url === '/__agy_oauth_code' && req.method === 'POST') {
             let body = '';
@@ -63,17 +60,24 @@ class ProxyHandler {
             headers['x-codeium-csrf-token'] = this.csrfToken;
         }
 
+        // Xóa các header hop-by-hop trong HTTP request thông thường
+        delete headers['connection'];
+        delete headers['upgrade'];
+
         const options = {
             hostname: this.targetHost,
             port: this.targetPort,
             path: parsedUrl.path,
             method: req.method,
-            headers: headers,
-            agent: this.agent
+            headers: headers
         };
 
         const proxyReq = http.request(options, (proxyRes) => {
-            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            const resHeaders = { ...proxyRes.headers };
+            delete resHeaders['transfer-encoding'];
+            delete resHeaders['connection'];
+
+            res.writeHead(proxyRes.statusCode, resHeaders);
             if (typeof res.flushHeaders === 'function') {
                 res.flushHeaders();
             }
@@ -86,7 +90,12 @@ class ProxyHandler {
                 }
             });
 
-            proxyRes.pipe(res, { end: true });
+            proxyRes.on('error', (err) => {
+                console.error('[PROXY] proxyRes error:', err.message);
+                if (!res.destroyed) res.destroy(err);
+            });
+
+            proxyRes.pipe(res);
         });
 
         proxyReq.setNoDelay(true);
@@ -99,13 +108,36 @@ class ProxyHandler {
             if (!res.headersSent) {
                 res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
                 res.end('Antigravity LAN Bridge: Lỗi kết nối tới Language Server');
+            } else {
+                if (!res.destroyed) res.destroy();
             }
         });
 
-        req.pipe(proxyReq, { end: true });
+        // Dọn dẹp kết nối CHỈ khi client bị ngắt ngang trước khi hoàn tất
+        req.on('close', () => {
+            if (!req.readableEnded && !proxyReq.destroyed) {
+                proxyReq.destroy();
+            }
+        });
+        res.on('close', () => {
+            if (!res.writableFinished && !proxyReq.destroyed) {
+                proxyReq.destroy();
+            }
+        });
+
+        req.on('error', (err) => {
+            if (!proxyReq.destroyed) proxyReq.destroy(err);
+        });
+
+        req.pipe(proxyReq);
     }
 
     handleTunnelUpgrade(req, clientSocket, head) {
+        if (!this.targetPort) {
+            clientSocket.destroy();
+            return;
+        }
+
         clientSocket.setKeepAlive(true, 2500);
         clientSocket.setNoDelay(true);
 

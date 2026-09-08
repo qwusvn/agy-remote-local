@@ -43,6 +43,20 @@ object AgyInputScript {
                             sendBtn.click();
                             return true;
                         }
+
+                        // Fallback: Nếu nút Send chưa mở hoặc đang trong hàng đợi, dispatch phím Enter vào Lexical Editor
+                        const editor = document.querySelector('[contenteditable="true"]');
+                        if (editor && editor.innerText.trim().length > 0) {
+                            editor.dispatchEvent(new KeyboardEvent('keydown', {
+                                key: 'Enter',
+                                code: 'Enter',
+                                keyCode: 13,
+                                which: 13,
+                                bubbles: true,
+                                cancelable: true
+                            }));
+                            return true;
+                        }
                     } catch(err) {
                         console.error('[AGY] __agyTriggerSend error:', err);
                     }
@@ -88,8 +102,13 @@ object AgyInputScript {
                         const editor = document.querySelector('[contenteditable="true"]');
                         if (editor) {
                             editor.focus();
-                            document.execCommand('selectAll', false, null);
-                            document.execCommand('delete', false, null);
+                            if (window.getSelection) {
+                                const sel = window.getSelection();
+                                sel.selectAllChildren(editor);
+                                document.execCommand('delete', false, null);
+                            }
+                            editor.innerHTML = '<p class="editor-paragraph"><br></p>';
+                            editor.dispatchEvent(new Event('input', { bubbles: true }));
                             return true;
                         }
                         const textarea = document.querySelector('textarea, input[type="text"]');

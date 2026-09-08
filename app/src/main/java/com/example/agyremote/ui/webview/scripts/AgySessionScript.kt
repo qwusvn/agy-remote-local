@@ -21,14 +21,13 @@ object AgySessionScript {
                 window.__agyTriggerStop = function() {
                     try {
                         const cancelBtn = document.querySelector(
-                            'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
-                            'button[aria-label*="Cancel (" i], ' +
-                            'button[aria-label*="Cancel(" i], ' +
-                            'button[aria-label="Cancel prompt" i], ' +
-                            'button[aria-label="Stop generation" i], ' +
+                            'button[data-tooltip-id*="cancel-tooltip"], ' +
+                            'button[aria-label*="Cancel" i], ' +
+                            'button[aria-label*="Stop" i], ' +
                             'button[aria-label*="Dừng" i], ' +
                             'button[aria-label*="Hủy" i], ' +
-                            'button[data-testid="subagent-stop"]'
+                            'button[data-testid="subagent-stop"], ' +
+                            'button:has(svg rect)'
                         );
                         if (cancelBtn) {
                             const btn = cancelBtn.tagName === 'BUTTON' ? cancelBtn : cancelBtn.closest('button');
@@ -47,6 +46,27 @@ object AgySessionScript {
                     return false;
                 };
 
+                // Hàm giải phóng hàng đợi tin nhắn (Auto-dispatch Queued Messages)
+                window.__agyFlushQueue = function() {
+                    try {
+                        const queuedContainer = Array.from(document.querySelectorAll('*')).find(
+                            el => el.innerText && el.innerText.includes('Queued Messages')
+                        );
+                        if (queuedContainer) {
+                            const sendArrow = queuedContainer.querySelector('button[aria-label*="Send" i], button:has(svg path)');
+                            if (sendArrow) {
+                                const propKey = Object.keys(sendArrow).find(k => k.startsWith('__reactProps'));
+                                if (propKey && sendArrow[propKey] && typeof sendArrow[propKey].onClick === 'function') {
+                                    try { sendArrow[propKey].onClick({ preventDefault: () => {}, stopPropagation: () => {} }); } catch(e) {}
+                                }
+                                sendArrow.click();
+                                return true;
+                            }
+                        }
+                    } catch(e) {}
+                    return false;
+                };
+
                 // 1. Giám sát trạng thái Agent isWorking bằng selector chuẩn xác Antigravity
                 function isAgentActive() {
                     try {
@@ -59,15 +79,14 @@ object AgySessionScript {
                         // Tìm nút Cancel trong ô nhập prompt ở đáy màn hình cuộc trò chuyện hiện tại
                         // Khi Agent đang suy nghĩ / sinh câu trả lời trong phiên này, nút Send biến thành nút Cancel
                         const cancelPromptBtn = document.querySelector(
-                            'button[data-tooltip-id="input-send-button-cancel-tooltip"], ' +
-                            'button[aria-label="Cancel prompt" i], ' +
-                            'button[aria-label*="Cancel (" i], ' +
-                            'button[aria-label*="Cancel(" i], ' +
-                            'button[aria-label="Stop generation" i], ' +
+                            'button[data-tooltip-id*="cancel-tooltip"], ' +
+                            'button[aria-label*="Cancel" i], ' +
+                            'button[aria-label*="Stop" i], ' +
                             'button[aria-label*="Dừng" i], ' +
                             'button[aria-label*="Hủy" i], ' +
                             'button[data-testid="subagent-stop"], ' +
-                            'div[data-testid="send-button-pending"]'
+                            'div[data-testid="send-button-pending"], ' +
+                            'button:has(svg rect)'
                         );
                         if (cancelPromptBtn) return true;
 
@@ -158,6 +177,9 @@ object AgySessionScript {
                                             );
                                         }
                                     }
+                                    setTimeout(() => {
+                                        if (typeof window.__agyFlushQueue === 'function') window.__agyFlushQueue();
+                                    }, 300);
                                 }
                             } else {
                                 absentCount = 0;

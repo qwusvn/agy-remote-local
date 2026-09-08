@@ -561,7 +561,12 @@ fun MainScreen(
                 onRefresh = {
                     errorMessage = null
                     isLoading = true
-                    webViewInstance?.reload()
+                    val targetUrl = currentTab?.url?.takeIf { it.isNotBlank() && !it.startsWith("data:") } ?: config.httpUrl
+                    if (webViewInstance?.url?.startsWith("data:") == true || webViewInstance?.url.isNullOrBlank()) {
+                        webViewInstance?.loadUrl(targetUrl)
+                    } else {
+                        webViewInstance?.reload()
+                    }
                 },
                 onExpandActions = { expandAllActions() },
                 onOpenSettings = { showConnectionDialog = true },
